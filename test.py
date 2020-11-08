@@ -30,12 +30,12 @@ dict_type = {"0800" : "IPv4 : 0x0800", "0806" : "ARP : 0x0806"}
 class Trame:
     
     def __init__(self,fichier):
-        trame_offset = 0
-        trame_length = 0
-        ligne = []
-        ligne_offset = 0
-        ligne_len = 0
-        f = open(fichier,"r")
+        self.trame_offset = 0
+        self.trame_length = 0
+        self.ligne = []
+        self.ligne_offset = 0
+        self.ligne_len = 0
+        self.f = open(fichier,"r")
 
     def lire_ligne(self):
         """
@@ -46,37 +46,81 @@ class Trame:
             self.ligne = self.f.read()
             self.ligne = self.ligne.split()
             if self.ligne == []:
-                raise Exception("EOF")
+                return False
             #On commence par vérifier l'offset
-            if all(c in string.hexdigits for c in L[0]) == False or int(self.ligne[0], 16) != self.trame_offset:
+            if all(c in string.hexdigits for c in self.ligne[0]) == False or int(self.ligne[0], 16) != self.trame_offset:
                 print ("Problème d'offset")
                 continue
             #On laisse uniquement les trames dans la ligne
             for mot in self.ligne:
                 if all(c in string.hexdigits for c in mot) == False or len(mot) != 2:
                     self.ligne.remove(mot)
-            #On met à jour notre self.length et ligne_offset /!\ TRES PROBABLEMENT INUTILE
-            self.ligne_len = len(ligne)
+            #On met à jour notre self.length et ligne_offset /!\ TRES PROBABLEMENT INUTILE, A REVISER PLUS TARD
+            self.ligne_len = len(self.ligne)
             if self.trame_length < self.ligne_len:
                 self.trame_length += self.ligne_len
             self.ligne_offset = 0
-
-            return ligne
+            # /!\/!\/!\ SPAGHETTI BOLOGNAISE /!\/!\/!\
+            return True
+            # /!\/!\/!\ SPAGHETTI BOLOGNAISE /!\/!\/!\
     
     def lire_octets(self,n):
+        """
+            lit n octets et retourne la string correspondante
+        """
         lus = 0
         res = ""
         while lus < n:
             if self.ligne_offset == self.ligne_len :
-                self.ligne = lire_ligne()
-            res += ligne[self.ligne_offset]
+                if not self.lire_ligne():
+                    # /!\/!\/!\ SPAGHETTI BOLOGNAISE /!\/!\/!\
+                    return False
+                    # /!\/!\/!\ SPAGHETTI BOLOGNAISE /!\/!\/!\
+            res += self.ligne[self.ligne_offset]
             self.ligne_offset += 1
             lus+=1
         return res
+
+    def ethernet(self):
+        dic = dict()
+        dic["mac_dest"] = self.lire_octets(6)
+        dic["mac_src"] = self.lire_octets(6)
+        dic["eth_type"] = self.lire_octets(2)
+        return dic
+
+    def ip(self):
+        dic = dict()
+        dic["type"] = self.lire_octets(1)
+        # /!\/!\/!\ SPAGHETTI BOLOGNAISE /!\/!\/!\
+        dic["HL"] = self.lire_octets(1)
+        # /!\/!\/!\ SPAGHETTI BOLOGNAISE /!\/!\/!\
+        dic["TOS"] = self.lire_octets(2)
+
+
+        # /!\/!\/!\ SPAGHETTI BOLOGNAISE /!\/!\/!\
+        dic["Total_length"] = self.lire_octets(4)
+        # /!\/!\/!\ SPAGHETTI BOLOGNAISE /!\/!\/!\ TODO : INCREMENTER LES ATTRIBUTS
+
+        dic["Identifier"] = self.lire_octets(4)
         
+
+        #/!\/!\/!\ A FINIR /!\/!\/!\
+        return dic
+
+    def tcp(self):
+        pass
+
+    def http(self):
+        pass    
+
     def lire_trame(self):
         pass
 
     def lire_fichier(self):
         #Plusieurs trames
         pass
+
+t = Trame("trame1.txt")
+print(t.ethernet())
+
+#J'ai juré ça a marché du premier coup j'ai même pas eu besoin de débugger cette merde
