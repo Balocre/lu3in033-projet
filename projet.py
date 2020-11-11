@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import io
 from collections import namedtuple
+from os import name
 import struct
 import re
 
@@ -91,25 +92,7 @@ class IPV4Packet:
     def get_nth_opt(self):
         raise NotImplementedError
 
-
-class Trace:
-    def __init__(self, *frames):
-        self.body = []
-        for frame in frames:
-            self.body.append(frame)
-
-class Frame:
-    def __init__(self, *fragments):
-        self.body = []
-        for frag in fragments:
-            self.body.append(frag)
-
-class Fragment:
-    def __init__(self, offset, data, garbage):
-        self.offset = offset
-        self.data = data
-        self.garbage = garbage
-
+# XXX: defining these as constants would probably make debugging easier
 terminals = (
     'frame_fragment_offset',
     'frame_fragment_data',
@@ -118,16 +101,47 @@ terminals = (
     'end_of_frame'
 )
 
+# frames really are "partial frames"
 non_terminals = (
     'frame',
     'trace',
     'frame_fragment'
 )
 
+class Trace:
+    def __init__(self, frame=None, trace=None): # a trace can be empty
+        self.children = {'frame':frame, 'trace':trace}
+        self.parent = None
+
+class Frame:
+    def __init__(self, frame_fragment=None, frame=None): # so can a frame
+        self.children = {'frame_fragment':frame_fragment, 'frame':frame}
+        self.parent = None
+
+class Fragment:
+    def __init__(self, frame_fragment_offset=None, frame_fragment_data=None, garbage=None): # but a fragment need at least an offset, owtherwise it doesn't exists
+        self.children = {'frame_fragment_offset':frame_fragment_offset , 'frame_fragment_data':frame_fragment_data, 'garbage':garbage}
+        self.parent = None
+
+# classes associated to each nt
+# XXX: worth exploring classes as key of the dict?
+nt_classes = {'frame':Frame, 'trace':Trace, 'frame_fragment':Fragment}
+
+#tokens that indicate the limit of associated nt
+nt_delimiters = {'end_of_frame_fragment':'frame_fragment', 'end_of_frame':'frame', '$':'trace'}
+
+# Grammar
+# S -> T
+# T -> F end_of_frame T | empty
+# F -> G F | empty
+# G -> frame_fragment_offset frame_fragment_data garbage end_of_fragment
+# $ -> EOF
+
 axiom = 'axiom'
 
 end_of_input = '$'
 
+# production rules are of the form ('element on the stack', 'element on the input'):['leftmost element', ..., 'rightmost element']
 productions = { ('trace', 'frame_fragment_offset'):['frame', 'end_of_frame', 'trace']
         , ('trace', 'end_of_input'):[]
         , ('trace', 'end_of_frame'):['frame', 'end_of_frame', 'trace']
@@ -136,14 +150,7 @@ productions = { ('trace', 'frame_fragment_offset'):['frame', 'end_of_frame', 'tr
         , ('frame_fragment', 'frame_fragment_offset'):['frame_fragment_offset', 'frame_fragment_data', 'garbage']
         }
 
-# Grammar
-# S -> T
-# T -> F end_of_frame T | empty
-# F -> G F | empty
-# G -> frame_fragment_offset frame_fragment_data garbage end_of_fragment
-
-# $ -> EOF
-
+# regex string to tokenize lines of the file
 e = r"^(?P<frame_fragment_offset>[0-9A-Fa-f]*)\s(?P<frame_fragment_data>([0-9A-Fa-f]{2}\s)*[0-9A-Fa-f]{2}|[0-9A-Fa-f]{2})?(?P<garbage>.*)(?P<end_of_frame_fragment>\n?|$)"
 
 class TraceParser033:
@@ -156,12 +163,12 @@ class TraceParser033:
                     tokens.append(g)
             p = tracefile.tell() # save current cursor pos
             c = tracefile.read(1)
-            if c == '': # thet for eof by reading 1 charcter
-                    tokens.append(('end_of_frame',))
+            if c == '': # test for eof by reading 1 charcter
+                    tokens.append(('end_of_frame', None))
                     break
             while(True): # lookahead of 1 "word" after new line if it is offset 0 then insert end_of_fragment token                
                 if(c != '0' and c != ' '): break
-                if(c == ' '): tokens.append(('end_of_frame',))
+                if(c == ' '): tokens.append(('end_of_frame', None))
                 c = tracefile.read(1)
             tracefile.seek(p) # rewind to saved pos
         tokens.append(('end_of_input', '$'))
@@ -172,34 +179,76 @@ class TraceParser033:
         stack = []
         stack.append('trace')
         i = 0
-        for t in tokens: print("tvalue:",t[0])
+
+        nodestack = []
+
+        # for t in tokens: print("tvalue:",t[0])
         while len(stack)>0:
-            print("stack1:",stack)
+            # print("stack1:",stack)
             s = stack.pop()
-            print("stack2:",stack)
-            print("s:",s)
-            print("token:",tokens[i])
+            # print("stack2:",stack)
+            # print("s:",s)
+            # print("token:",tokens[i])
             if s in terminals or s == '$':
-                if tokens[i][0] == s:
+                if tokens[i][0] == s: # if token identifier matches element on top of the stack
                     i += 1
                 else:
                     raise ValueError("Bad input")
+
+                # AST logic
+                if s in nt_delimiters:
+                    while not isinstance(nodestack[-1], nt_classes[nt_delimiters[s]]): # pop stack while class of node is not class of nt associated delimiter
+                        nodestack.pop() # pop node children
+                    print('stack1:', end='')
+                    for n in nodestack: print(type(n).__name__, end='')
+                    print("")
+                    nodestack.pop()
+                    print('stack2:', end='')
+                    for n in nodestack: print(type(n).__name__, end='')
+                    print("")
+                    # nodestack.pop()
+                    # print('stack3:', end='')
+                    # for n in nodestack: print(type(n).__name__, end='')
+                    # print("")
+                    # print(stack)
+                else:
+                    nodestack[-1].children[s] = tokens[i-1][1] # update value of key = elemnt of stack
+
             elif s in non_terminals:
                 rule = (s, tokens[i][0])
-                print("rule:",rule)
+                # print("rule:",rule)
                 if rule in productions:
-                    for r in reversed(productions[rule]):
+                    for r in reversed(productions[rule]): # reversed because leff hand elements must be evaluated first
                         stack.append(r)
                 else:
                     raise ValueError("Bad rule")
 
+                # AST logic 
+                node = nt_classes[s]()
+                if len(nodestack)>0:
+                    node.parent = nodestack[-1] # parent is node on top of the stack
+                else: # it should only happen for root of AST
+                    node.parent = None
+                nodestack.append(node)
+                if nodestack[-1].parent: # berk not very elegant
+                    nodestack[-1].parent.children[s] = nodestack[-1] # update parents ref to child node
+
+            # print("nodestack:",nodestack)
+            # for n in nodestack: print(type(n).__name__, end='')
+            print("stac:", stack)
+            print("")
+            
+
+        print("Succesfully parsed input")
+
 def main():
     with io.open('extr.txt') as f:
         tp = TraceParser033()
-        print(f)
         t = tp.lex(f)
-        print(t)
-        tp.parse(t)
+        tree = tp.parse(t)
+        for c in tree.children.items(): print(c)
+        print(tree.children)
+        print("2:",tree.children['frame'].children['frame'].children['frame_fragment'].children)
 
 if __name__ == "__main__":
     main()
