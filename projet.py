@@ -150,6 +150,7 @@ class FragmentNode:
 
 # classes associated to each nt
 # XXX: worth exploring classes as key of the dict?
+# TODO: nt->ast/ast_node
 nt_classes = {'frame':FrameNode, 'trace':TraceNode, 'frame_fragment':FragmentNode, 'ast':TraceAST}
 
 #tokens that indicate the limit of associated nt
@@ -225,11 +226,39 @@ class TraceParser033:
         print("Succesfully parsed input")
         return nodestack[0]
 
+def extend_pack_into(format, buffer, offset, *v):
+    if len(buffer) < offset + struct.calcsize(format):
+        buffer = buffer.ljust(offset + struct.calcsize(format))
+    struct.pack_into(format, buffer, offset, *v)
+    return buffer
+
+
+class TraceAnalyser033:
+    def extract_ast_data():
+        pass
+
+    def extract_framenode_data(self, node):
+        partial_data = ""
+        while node != None:
+            if node.children['frame'] == None:
+                break
+            else:
+                partial_data += node.children['frame_fragment'].children['frame_fragment_data'] + " "
+                node = node.children['frame']
+
+        return bytes.fromhex(partial_data)
+            
+        
+
 def main():
     with io.open('extr.txt') as f:
         tp = TraceParser033()
         t = tp.lex(f)
         tree = tp.parse(t)
+        an = TraceAnalyser033()
+        d = an.extract_framenode_data(tree.children['trace'].children['frame'])
+        print("")
+
 
 if __name__ == "__main__":
     main()
