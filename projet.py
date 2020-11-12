@@ -1,96 +1,9 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, InitVar, field
 import io
 from collections import namedtuple
-from os import name
 import struct
 import re
-
-# word = HEXDIGIT HEXDIGIT
-# space = " "
-# backline = "\n"
-# BOF = ?
-# frame = (BOF / backline) "0" "0" space *[(*[word space] [word] / word) backline]
-
-# eth_src = 48
-# eth_dst = 48
-# eth_type = 16
-# eth_data = 368, 120000
-
-ETH_HEADER = (
-    ('DST', '6s'),
-    ('SRC', '6s'),
-    ('PTO', 'H')
-)
-
-ETH_PTO = (
-    ('IPV4', 0x8000)
-)
-
-class EthReader:
-    pass
-
-
-@dataclass
-class EthFrame:
-    src: bytes
-    dst: bytes
-    ethtype: bytes
-    data: bytes
-
-    @classmethod
-    def fromhex(cls, s): # on multiplie le nombre d'octets par 3 car <atom> ::= <hex>,<hex>," "
-        src = bytes.fromhex(s[0:18])
-        dst = bytes.fromhex(s[18:36])
-        ethtype = bytes.fromhex(s[36:42])
-        data = bytes.fromhex(s[42:])
-        return cls(src, dst, ethtype, data)
-
-@dataclass
-class IPV4Packet:
-    ver: bytes
-    hl: bytes
-    tos: bytes
-    tl: bytes
-    id: bytes
-    frag: bytes # includes flags
-    ttl: bytes
-    proto: bytes
-    chksum: bytes
-    src: bytes
-    dst: bytes
-    opt: bytes
-    data: bytes
-    
-    def frombytes(cls, b):
-        pass
-
-    @classmethod
-    def fromhex(cls, s):
-        ver = bytes.fromhex(s[0:1])
-
-        hl = bytes.fromhex(s[12:24])
-        tos = bytes.fromhex(s[24:48])
-        tl = bytes.fromhex(s[48:96])
-        id = bytes.fromhex(s[96:144])
-        df = bytes.fromhex(s[147:150])
-        mf = bytes.fromhex(s[151:153])
-        frag = bytes.fromhex(s[153:192])
-        ttl = bytes.fromhex(s[192:216])
-        proto = bytes.fromhex(s[216:240])
-        chksum = bytes.fromhex(s[240:288])
-        src = bytes.fromhex(s[288:384])
-        dst = bytes.fromhex(s[384:480])
-        opt = bytes.fromhex(s[480:576])
-        data = bytes.fromhex(s[576:])
-        return cls(ver, hl, tos, tl, id, df, mf, frag, ttl, proto, chksum, src, dst, opt, data)
-
-    # ex de méthodes utiles :
-
-    def nb_opt(self):
-        raise NotImplementedError
-
-    def get_nth_opt(self):
-        raise NotImplementedError
+from typing import List
 
 # XXX: defining these as constants would probably make debugging easier
 terminals = (
@@ -128,30 +41,34 @@ productions = { ('trace', 'frame_fragment_offset'):['frame', 'end_of_frame', 'tr
         , ('frame_fragment', 'frame_fragment_offset'):['frame_fragment_offset', 'frame_fragment_data', 'garbage']
         }
 
-# XXX: children as dict makes it so useless children nodes are appended such as delimiters
-class TraceAST:
+# AST structures definitions
+class TraceAST033:
+    '''Represents the root of the AST'''
     def __init__(self, trace=None):
         self.children = {'trace':trace}
 
-class TraceNode:
+class TraceNode033:
+    '''Represents a trace node in the AST'''
     def __init__(self, frame=None, trace=None): # a trace can be empty
         self.children = {'frame':frame, 'trace':trace}
         self.parent = None
 
-class FrameNode:
+class FrameNode033:
+    '''Represents a frame node in the AST'''
     def __init__(self, frame_fragment=None, frame=None): # so can a frame
         self.children = {'frame_fragment':frame_fragment, 'frame':frame}
         self.parent = None
 
-class FragmentNode:
+class FragmentNode033:
+    '''Represents a fragment node in the AST'''
     def __init__(self, frame_fragment_offset=None, frame_fragment_data=None, garbage=None): # but a fragment need at least an offset, owtherwise it doesn't exists
         self.children = {'frame_fragment_offset':frame_fragment_offset , 'frame_fragment_data':frame_fragment_data, 'garbage':garbage}
         self.parent = None
 
 # classes associated to each nt
 # XXX: worth exploring classes as key of the dict?
-# TODO: nt->ast/ast_node
-nt_classes = {'frame':FrameNode, 'trace':TraceNode, 'frame_fragment':FragmentNode, 'ast':TraceAST}
+# TODO: rename nt->ast/ast_node
+nt_classes = {'frame':FrameNode033, 'trace':TraceNode033, 'frame_fragment':FragmentNode033, 'ast':TraceAST033}
 
 #tokens that indicate the limit of associated nt
 nt_delimiters = {'end_of_frame_fragment':'frame', 'end_of_frame':'trace', '$':'ast'}
@@ -159,7 +76,7 @@ nt_delimiters = {'end_of_frame_fragment':'frame', 'end_of_frame':'trace', '$':'a
 # regex string to tokenize lines of the file
 e = r"^(?P<frame_fragment_offset>[0-9A-Fa-f]*)\s(?P<frame_fragment_data>([0-9A-Fa-f]{2}\s)*[0-9A-Fa-f]{2}|[0-9A-Fa-f]{2})?(?P<garbage>.*)(?P<end_of_frame_fragment>\n?|$)"
 
-class TraceParser033:
+class TraceFileParser033:
     def lex(self, tracefile):
         '''Tokenize the tracefile and handles incorrect values
         '''
@@ -190,7 +107,7 @@ class TraceParser033:
         i = 0
 
         nodestack = []
-        root = TraceAST()
+        root = TraceAST033()
         nodestack.append(root)
 
         while len(stack)>0:
@@ -202,7 +119,7 @@ class TraceParser033:
                     raise ValueError("Bad input")
 
                 # AST logic
-                if s in nt_delimiters:
+                if s in nt_delimiters: # catch delimiter tokens and change position in AST to matching node
                     while not isinstance(nodestack[-1], nt_classes[nt_delimiters[s]]): # pop stack while class of node is not class of nt associated delimiter
                         nodestack.pop() # pop node children
                 else:
@@ -226,16 +143,62 @@ class TraceParser033:
         print("Succesfully parsed input")
         return nodestack[0]
 
+ETHERTYPES = {
+    0x0800: 'Internet Protocol version 4',
+    0x0806: 'Adresse Resolution Protocol',
+    0x8100: 'IEE 802.1Q / IEEE 802.1aq'
+}
+
+ETHFRAME_HEADER_FORMATS = {
+    0x0800: '!6s6sH',
+    0x0806: '!HHBBHI???', #invalid
+    0x8100: '!6s6sHHH'
+}
+
 def extend_pack_into(format, buffer, offset, *v):
+    '''Write bytes values into bytearray at given offset, extends the bytearray to fit the values if necessary'''
     if len(buffer) < offset + struct.calcsize(format):
-        buffer = buffer.ljust(offset + struct.calcsize(format), b'\xff')
+        buffer = buffer.ljust(offset + struct.calcsize(format), b'\xff') # padding character is 0xff
     struct.pack_into(format, buffer, offset, *v)
     return buffer
+
+@dataclass
+class IPv4Packet033:
+    header: struct.Struct
+    data: bytes
+
+@dataclass
+class EthFrame033:
+    frame_data: InitVar[bytes]
+    payload: bytes = field(init=False)
+    header: bytes = field(init=False)
+    # hl: int = field(init=False)
+
+    def __post_init__(self, frame_data):
+        et = struct.unpack_from("!H", frame_data, 12)[0]
+        if et in ETHERTYPES:
+            fmt = ETHFRAME_HEADER_FORMATS[et]
+            hl = struct.calcsize(fmt)
+            self.header = struct.unpack_from(fmt, frame_data, 0)
+            self.payload = ...
+        else:
+            raise ValueError("Unrecognized ethernet type")
+
+@dataclass
+class Trace033:
+    frames: List[EthFrame033]
+
+class Graph033:
+    def __init__(self, trace_data):
+        frames = []
+        for frame_data in trace_data:
+            frames.append(EthFrame033(frame_data))
+        self.root = Trace033(frames)
 
 
 class TraceAnalyser033:
     def extract_trace_data(self, tracenode):
-        '''Extracts captured traffic data TraceNode object
+        '''Extracts captured traffic data TraceNode033 object
         '''
         trace_data = []
         while tracenode != None:
@@ -249,34 +212,37 @@ class TraceAnalyser033:
         return trace_data
 
     def extract_framenode_data(self, framenode):
-        '''Extracts data of a FrameNode object
+        '''Extracts data of a FrameNode033 object
         '''
-        frame_data = ""
-        frame_data2 = bytearray()
+        frame_data = bytearray()
         while framenode != None:
             if framenode.children['frame'] == None:
                 break
             else:
-                frame_data += framenode.children['frame_fragment'].children['frame_fragment_data'] + " "
                 raw_data = framenode.children['frame_fragment'].children['frame_fragment_data']
                 partial_data = bytes.fromhex(raw_data)
-                frame_data2 = extend_pack_into("{}s".format(len(partial_data)), frame_data2, int(bytes.fromhex(framenode.children['frame_fragment'].children['frame_fragment_offset']).hex(),16), partial_data)
+                # in this part the frame data is reorderred
+                frame_data = extend_pack_into("{}s".format(len(partial_data))
+                            , frame_data
+                            , int(bytes.fromhex(framenode.children['frame_fragment'].children['frame_fragment_offset']).hex(),16)
+                            , partial_data)
                 framenode = framenode.children['frame']
 
-        #return bytes.fromhex(frame_data)
-        return frame_data2
-            
-        
+        return frame_data
+
+
+
 
 def main():
     with io.open('extr.txt') as f:
-        tp = TraceParser033()
+        tp = TraceFileParser033()
         t = tp.lex(f)
         tree = tp.parse(t)
         an = TraceAnalyser033()
         d = an.extract_trace_data(tree.children['trace'])
+        f1 = d[0]
+        ethf = EthFrame033(f1)
         print("")
-
 
 if __name__ == "__main__":
     main()
