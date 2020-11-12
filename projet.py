@@ -108,28 +108,6 @@ non_terminals = (
     'frame_fragment'
 )
 
-class Trace:
-    def __init__(self, frame=None, trace=None): # a trace can be empty
-        self.children = {'frame':frame, 'trace':trace}
-        self.parent = None
-
-class Frame:
-    def __init__(self, frame_fragment=None, frame=None): # so can a frame
-        self.children = {'frame_fragment':frame_fragment, 'frame':frame}
-        self.parent = None
-
-class Fragment:
-    def __init__(self, frame_fragment_offset=None, frame_fragment_data=None, garbage=None): # but a fragment need at least an offset, owtherwise it doesn't exists
-        self.children = {'frame_fragment_offset':frame_fragment_offset , 'frame_fragment_data':frame_fragment_data, 'garbage':garbage}
-        self.parent = None
-
-# classes associated to each nt
-# XXX: worth exploring classes as key of the dict?
-nt_classes = {'frame':Frame, 'trace':Trace, 'frame_fragment':Fragment}
-
-#tokens that indicate the limit of associated nt
-nt_delimiters = {'end_of_frame_fragment':'frame_fragment', 'end_of_frame':'frame', '$':'trace'}
-
 # Grammar
 # S -> T
 # T -> F end_of_frame T | empty
@@ -137,24 +115,53 @@ nt_delimiters = {'end_of_frame_fragment':'frame_fragment', 'end_of_frame':'frame
 # G -> frame_fragment_offset frame_fragment_data garbage end_of_fragment
 # $ -> EOF
 
-axiom = 'axiom'
+axiom = 'trace' # S -> T
 
 end_of_input = '$'
 
 # production rules are of the form ('element on the stack', 'element on the input'):['leftmost element', ..., 'rightmost element']
 productions = { ('trace', 'frame_fragment_offset'):['frame', 'end_of_frame', 'trace']
-        , ('trace', 'end_of_input'):[]
+        , ('trace', '$'):[]
         , ('trace', 'end_of_frame'):['frame', 'end_of_frame', 'trace']
         , ('frame', 'frame_fragment_offset'):['frame_fragment', 'end_of_frame_fragment', 'frame']
         , ('frame', 'end_of_frame'):[]
         , ('frame_fragment', 'frame_fragment_offset'):['frame_fragment_offset', 'frame_fragment_data', 'garbage']
         }
 
+# XXX: children as dict makes it so useless children nodes are appended such as delimiters
+class TraceAST:
+    def __init__(self, trace=None):
+        self.children = {'trace':trace}
+
+class TraceNode:
+    def __init__(self, frame=None, trace=None): # a trace can be empty
+        self.children = {'frame':frame, 'trace':trace}
+        self.parent = None
+
+class FrameNode:
+    def __init__(self, frame_fragment=None, frame=None): # so can a frame
+        self.children = {'frame_fragment':frame_fragment, 'frame':frame}
+        self.parent = None
+
+class FragmentNode:
+    def __init__(self, frame_fragment_offset=None, frame_fragment_data=None, garbage=None): # but a fragment need at least an offset, owtherwise it doesn't exists
+        self.children = {'frame_fragment_offset':frame_fragment_offset , 'frame_fragment_data':frame_fragment_data, 'garbage':garbage}
+        self.parent = None
+
+# classes associated to each nt
+# XXX: worth exploring classes as key of the dict?
+nt_classes = {'frame':FrameNode, 'trace':TraceNode, 'frame_fragment':FragmentNode, 'ast':TraceAST}
+
+#tokens that indicate the limit of associated nt
+nt_delimiters = {'end_of_frame_fragment':'frame', 'end_of_frame':'trace', '$':'ast'}
+
 # regex string to tokenize lines of the file
 e = r"^(?P<frame_fragment_offset>[0-9A-Fa-f]*)\s(?P<frame_fragment_data>([0-9A-Fa-f]{2}\s)*[0-9A-Fa-f]{2}|[0-9A-Fa-f]{2})?(?P<garbage>.*)(?P<end_of_frame_fragment>\n?|$)"
 
 class TraceParser033:
     def lex(self, tracefile):
+        '''Tokenize the tracefile and handles incorrect values
+        '''
         tokens = []
         while(l := tracefile.readline()):
             m = re.match(e, l)
@@ -171,24 +178,22 @@ class TraceParser033:
                 if(c == ' '): tokens.append(('end_of_frame', None))
                 c = tracefile.read(1)
             tracefile.seek(p) # rewind to saved pos
-        tokens.append(('end_of_input', '$'))
+        tokens.append(('$', None))
 
         return tokens
 
     def parse(self, tokens):
-        stack = []
-        stack.append('trace')
+        '''Validates the input and builds the Abstract Syntax Tree of the file
+        '''
+        stack = ['$', 'trace']
         i = 0
 
         nodestack = []
+        root = TraceAST()
+        nodestack.append(root)
 
-        # for t in tokens: print("tvalue:",t[0])
         while len(stack)>0:
-            # print("stack1:",stack)
             s = stack.pop()
-            # print("stack2:",stack)
-            # print("s:",s)
-            # print("token:",tokens[i])
             if s in terminals or s == '$':
                 if tokens[i][0] == s: # if token identifier matches element on top of the stack
                     i += 1
@@ -199,18 +204,6 @@ class TraceParser033:
                 if s in nt_delimiters:
                     while not isinstance(nodestack[-1], nt_classes[nt_delimiters[s]]): # pop stack while class of node is not class of nt associated delimiter
                         nodestack.pop() # pop node children
-                    print('stack1:', end='')
-                    for n in nodestack: print(type(n).__name__, end='')
-                    print("")
-                    nodestack.pop()
-                    print('stack2:', end='')
-                    for n in nodestack: print(type(n).__name__, end='')
-                    print("")
-                    # nodestack.pop()
-                    # print('stack3:', end='')
-                    # for n in nodestack: print(type(n).__name__, end='')
-                    # print("")
-                    # print(stack)
                 else:
                     nodestack[-1].children[s] = tokens[i-1][1] # update value of key = elemnt of stack
 
@@ -225,30 +218,18 @@ class TraceParser033:
 
                 # AST logic 
                 node = nt_classes[s]()
-                if len(nodestack)>0:
-                    node.parent = nodestack[-1] # parent is node on top of the stack
-                else: # it should only happen for root of AST
-                    node.parent = None
+                node.parent = nodestack[-1] # parent is node on top of the stack
                 nodestack.append(node)
-                if nodestack[-1].parent: # berk not very elegant
-                    nodestack[-1].parent.children[s] = nodestack[-1] # update parents ref to child node
-
-            # print("nodestack:",nodestack)
-            # for n in nodestack: print(type(n).__name__, end='')
-            print("stac:", stack)
-            print("")
-            
+                nodestack[-1].parent.children[s] = nodestack[-1] # update parents ref to child node
 
         print("Succesfully parsed input")
+        return nodestack[0]
 
 def main():
     with io.open('extr.txt') as f:
         tp = TraceParser033()
         t = tp.lex(f)
         tree = tp.parse(t)
-        for c in tree.children.items(): print(c)
-        print(tree.children)
-        print("2:",tree.children['frame'].children['frame'].children['frame_fragment'].children)
 
 if __name__ == "__main__":
     main()
