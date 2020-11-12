@@ -228,25 +228,43 @@ class TraceParser033:
 
 def extend_pack_into(format, buffer, offset, *v):
     if len(buffer) < offset + struct.calcsize(format):
-        buffer = buffer.ljust(offset + struct.calcsize(format))
+        buffer = buffer.ljust(offset + struct.calcsize(format), b'\xff')
     struct.pack_into(format, buffer, offset, *v)
     return buffer
 
 
 class TraceAnalyser033:
-    def extract_ast_data():
-        pass
-
-    def extract_framenode_data(self, node):
-        partial_data = ""
-        while node != None:
-            if node.children['frame'] == None:
+    def extract_trace_data(self, tracenode):
+        '''Extracts captured traffic data TraceNode object
+        '''
+        trace_data = []
+        while tracenode != None:
+            if tracenode.children['trace'] == None:
                 break
             else:
-                partial_data += node.children['frame_fragment'].children['frame_fragment_data'] + " "
-                node = node.children['frame']
+                frame_data = self.extract_framenode_data(tracenode.children['frame'])
+                trace_data.append(frame_data)
+                tracenode = tracenode.children['trace']
 
-        return bytes.fromhex(partial_data)
+        return trace_data
+
+    def extract_framenode_data(self, framenode):
+        '''Extracts data of a FrameNode object
+        '''
+        frame_data = ""
+        frame_data2 = bytearray()
+        while framenode != None:
+            if framenode.children['frame'] == None:
+                break
+            else:
+                frame_data += framenode.children['frame_fragment'].children['frame_fragment_data'] + " "
+                raw_data = framenode.children['frame_fragment'].children['frame_fragment_data']
+                partial_data = bytes.fromhex(raw_data)
+                frame_data2 = extend_pack_into("{}s".format(len(partial_data)), frame_data2, int(bytes.fromhex(framenode.children['frame_fragment'].children['frame_fragment_offset']).hex(),16), partial_data)
+                framenode = framenode.children['frame']
+
+        #return bytes.fromhex(frame_data)
+        return frame_data2
             
         
 
@@ -256,7 +274,7 @@ def main():
         t = tp.lex(f)
         tree = tp.parse(t)
         an = TraceAnalyser033()
-        d = an.extract_framenode_data(tree.children['trace'].children['frame'])
+        d = an.extract_trace_data(tree.children['trace'])
         print("")
 
 
