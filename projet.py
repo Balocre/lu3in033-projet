@@ -1,8 +1,10 @@
 from dataclasses import astuple, dataclass, InitVar, field
 import io
 from collections import namedtuple
+from os import name
 import struct
 import re
+from struct import pack
 from typing import List, NamedTuple, Optional, Any
 import weakref
 
@@ -45,7 +47,7 @@ productions = { ('trace', 'frame_fragment_offset'):['frame', 'end_of_frame', 'tr
 # AST structures definitions
 
 @dataclass
-class FragmentNode033:
+class FragmentASTNode033:
     '''Represents a fragment node in the AST'''
 
     parent: weakref.ReferenceType
@@ -54,27 +56,27 @@ class FragmentNode033:
     garbage: Optional[str] = None
 
 @dataclass
-class FrameNode033:
+class FrameASTNode033:
     '''Represents a frame node in the AST'''
 
     parent: weakref.ReferenceType
-    frame_fragment: Optional[FragmentNode033] = None
+    frame_fragment: Optional[FragmentASTNode033] = None
     frame: Optional[Any] = None # should be of type FrameNode033 but since you can't forward declare... fuck python
     
 
 @dataclass
-class TraceNode033:
+class TraceASTNode033:
     '''Represents a trace node in the AST'''
 
     parent: Optional[weakref.ReferenceType] = None
-    frame: Optional[FrameNode033] = None
+    frame: Optional[FrameASTNode033] = None
     trace: Optional[Any] = None # fuck python
 
 @dataclass
 class TraceAST033:
     '''Represents the root of the AST'''
 
-    root: Optional[TraceNode033] = None
+    root: Optional[TraceASTNode033] = None
 
     def set_root(self, root):
         self.root = root
@@ -82,7 +84,7 @@ class TraceAST033:
 # classes associated to each nt
 # XXX: worth exploring classes as key of the dict?
 # TODO: rename nt->ast/ast_node
-nt_classes = {'frame':FrameNode033, 'trace':TraceNode033, 'frame_fragment':FragmentNode033, 'ast':TraceAST033}
+nt_classes = {'frame':FrameASTNode033, 'trace':TraceASTNode033, 'frame_fragment':FragmentASTNode033, 'ast':TraceAST033}
 
 #tokens that indicate the limit of associated nt
 nt_delimiters = {'end_of_frame_fragment':'frame', 'end_of_frame':'trace', '$':'ast'}
@@ -117,7 +119,7 @@ class TraceFileParser033:
     def parse(self, tokens):
         '''Validates the input and builds the Abstract Syntax Tree of the file
         '''
-        stack = ['$', 'trace']
+        stack = ['$', 'trace'] # rightmost element is on the left
         i = 0
 
         nodestack = []
@@ -172,26 +174,43 @@ def extend_pack_into(format, buffer, offset, *v):
     struct.pack_into(format, buffer, offset, *v)
     return buffer
 
-ETHERTYPES = {
+ETH_TYPE = {
     0x0800: 'Internet Protocol version 4',
     0x0806: 'Adresse Resolution Protocol',
     0x8100: 'IEE 802.1Q / IEEE 802.1aq'
 }
 
-ETHFRAME_HEADER_FORMATS = {
+ETH_HDR_STRUCT_FMT = {
     0x0800: '!6s6sH',
     0x0806: '!HHBBHI???', #invalid
     0x8100: '!6s6sHHH'
 }
 
-ETHFRAME_HEADERS = {
-    0x0800: namedtuple('H0800', ['src', 'dst', 'type'])
+ETH_HDR = {
+    0x0800: namedtuple('H0800', ['dst', 'src', 'type'])
 }
+
+IP4_HD_STRUCT_FMT = '!BBHHHBBHII'
+
+IP4_HDR = namedtuple('HIP4', ['version', 'ihl', 'tos', 'tlength', 'id', 'flags', 'frag_offset', 'ttl', 'proto', 'checksum', 'src', 'dst'])
 
 @dataclass
 class IPv4Packet033:
-    header: bytes
+    header: NamedTuple
+    opt: bytes
     payload: bytes
+
+    @classmethod
+    def from_bytes(cls, packet_data):
+        l = struct.unpack_from('!H', packet_data, 2)[0]
+        h = struct.unpack_from(IP4_HD_STRUCT_FMT, packet_data, 0)
+        h = (h[0] & 0xF0, h[0] & 0x0F) + h[1:4] + (h[4] & 0xE0, h[4] & 0x1F) + h[5:]
+        packet_header = IP4_HDR._make(h)
+        packet_opt = packet_data[struct.calcsize(IP4_HD_STRUCT_FMT):l]
+        packet_payload = packet_data[l:]
+
+        return cls(packet_header, packet_opt, packet_payload)
+
 
 @dataclass
 class EthFrame033:
@@ -201,9 +220,9 @@ class EthFrame033:
     @classmethod
     def from_bytes(cls, frame_data):
         e = struct.unpack_from('!H', frame_data, 12)[0] # attempts to read the ethernet type of the packet from the bytes string
-        if e in ETHERTYPES:
-            frame_header = ETHFRAME_HEADERS[e]._make(struct.unpack_from(ETHFRAME_HEADER_FORMATS[e], frame_data, 0))
-            frame_payload = frame_data[struct.calcsize(ETHFRAME_HEADER_FORMATS[e]):]
+        if e in ETH_TYPE:
+            frame_header = ETH_HDR[e]._make(struct.unpack_from(ETH_HDR_STRUCT_FMT[e], frame_data, 0))
+            frame_payload = IPv4Packet033.from_bytes(frame_data[struct.calcsize(ETH_HDR_STRUCT_FMT[e]):])
         else:
             raise ValueError("unknown type")
         
@@ -247,7 +266,8 @@ class TraceAnalyser033:
 
         return frame_data
 
-    def derive_graph(self, ast):
+    def derive_tree(self, ast):
+        '''Derive a tree representing the trace from the AST produced by the parse method'''
         frames = self.extract_trace_data(ast.root)
         frames = list(map(EthFrame033.from_bytes, frames))
         return Trace033(frames)
@@ -261,7 +281,7 @@ def main():
         d = an.extract_trace_data(tree.root)
         f1 = d[0]
         frb = EthFrame033.from_bytes(f1)
-        g = an.derive_graph(tree)
+        g = an.derive_tree(tree)
         print("")
 
 if __name__ == "__main__":
