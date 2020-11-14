@@ -1,9 +1,10 @@
-from dataclasses import dataclass, InitVar, field
+from dataclasses import astuple, dataclass, InitVar, field
 import io
 from collections import namedtuple
 import struct
 import re
-from typing import List
+from typing import List, NamedTuple, Optional, Any
+import weakref
 
 # XXX: defining these as constants would probably make debugging easier
 terminals = (
@@ -42,28 +43,41 @@ productions = { ('trace', 'frame_fragment_offset'):['frame', 'end_of_frame', 'tr
         }
 
 # AST structures definitions
-class TraceAST033:
-    '''Represents the root of the AST'''
-    def __init__(self, trace=None):
-        self.children = {'trace':trace}
 
-class TraceNode033:
-    '''Represents a trace node in the AST'''
-    def __init__(self, frame=None, trace=None): # a trace can be empty
-        self.children = {'frame':frame, 'trace':trace}
-        self.parent = None
-
-class FrameNode033:
-    '''Represents a frame node in the AST'''
-    def __init__(self, frame_fragment=None, frame=None): # so can a frame
-        self.children = {'frame_fragment':frame_fragment, 'frame':frame}
-        self.parent = None
-
+@dataclass
 class FragmentNode033:
     '''Represents a fragment node in the AST'''
-    def __init__(self, frame_fragment_offset=None, frame_fragment_data=None, garbage=None): # but a fragment need at least an offset, owtherwise it doesn't exists
-        self.children = {'frame_fragment_offset':frame_fragment_offset , 'frame_fragment_data':frame_fragment_data, 'garbage':garbage}
-        self.parent = None
+
+    parent: weakref.ReferenceType
+    frame_fragment_offset: Optional[str] = None
+    frame_fragment_data: Optional[str] = None
+    garbage: Optional[str] = None
+
+@dataclass
+class FrameNode033:
+    '''Represents a frame node in the AST'''
+
+    parent: weakref.ReferenceType
+    frame_fragment: Optional[FragmentNode033] = None
+    frame: Optional[Any] = None # should be of type FrameNode033 but since you can't forward declare... fuck python
+    
+
+@dataclass
+class TraceNode033:
+    '''Represents a trace node in the AST'''
+
+    parent: Optional[weakref.ReferenceType] = None
+    frame: Optional[FrameNode033] = None
+    trace: Optional[Any] = None # fuck python
+
+@dataclass
+class TraceAST033:
+    '''Represents the root of the AST'''
+
+    root: Optional[TraceNode033] = None
+
+    def set_root(self, root):
+        self.root = root
 
 # classes associated to each nt
 # XXX: worth exploring classes as key of the dict?
@@ -107,23 +121,25 @@ class TraceFileParser033:
         i = 0
 
         nodestack = []
-        root = TraceAST033()
-        nodestack.append(root)
+        ast = TraceAST033()
 
         while len(stack)>0:
             s = stack.pop()
-            if s in terminals or s == '$':
+            if s in terminals:
                 if tokens[i][0] == s: # if token identifier matches element on top of the stack
                     i += 1
                 else:
-                    raise ValueError("Bad input")
+                    raise ValueError("bad token")
 
                 # AST logic
                 if s in nt_delimiters: # catch delimiter tokens and change position in AST to matching node
                     while not isinstance(nodestack[-1], nt_classes[nt_delimiters[s]]): # pop stack while class of node is not class of nt associated delimiter
-                        nodestack.pop() # pop node children
+                        try:
+                            nodestack.pop() # pop node children
+                        except IndexError as e:
+                            raise Exception('there is no node corresponding to this delimiter:' + s) from e
                 else:
-                    nodestack[-1].children[s] = tokens[i-1][1] # update value of key = elemnt of stack
+                    setattr(nodestack[-1], s, tokens[i-1][1]) # update value of key = elemnt of stack
 
             elif s in non_terminals:
                 rule = (s, tokens[i][0])
@@ -132,16 +148,29 @@ class TraceFileParser033:
                     for r in reversed(productions[rule]): # reversed because leff hand elements must be evaluated first
                         stack.append(r)
                 else:
-                    raise ValueError("Bad rule")
+                    raise ValueError("bad rule")
 
                 # AST logic 
-                node = nt_classes[s]()
-                node.parent = nodestack[-1] # parent is node on top of the stack
+                
+                if len(nodestack) == 0:
+                    node = nt_classes[s]()
+                    ast.set_root(node)
+                else:
+                    node = nt_classes[s](None) # TODO: find a way to get a hold of parent ref
+                    #node.parent = weakref.proxy(nodestack[-1]) # parent is node on top of the stack
+                    setattr(nodestack[-1], s, node) # update parents ref to child node
                 nodestack.append(node)
-                nodestack[-1].parent.children[s] = nodestack[-1] # update parents ref to child node
 
         print("Succesfully parsed input")
-        return nodestack[0]
+        return ast
+
+
+def extend_pack_into(format, buffer, offset, *v):
+    '''Write bytes values into bytearray at given offset, extends the bytearray to fit the values if necessary'''
+    if len(buffer) < offset + struct.calcsize(format):
+        buffer = buffer.ljust(offset + struct.calcsize(format), b'\xff') # padding character is 0xff
+    struct.pack_into(format, buffer, offset, *v)
+    return buffer
 
 ETHERTYPES = {
     0x0800: 'Internet Protocol version 4',
@@ -155,46 +184,34 @@ ETHFRAME_HEADER_FORMATS = {
     0x8100: '!6s6sHHH'
 }
 
-def extend_pack_into(format, buffer, offset, *v):
-    '''Write bytes values into bytearray at given offset, extends the bytearray to fit the values if necessary'''
-    if len(buffer) < offset + struct.calcsize(format):
-        buffer = buffer.ljust(offset + struct.calcsize(format), b'\xff') # padding character is 0xff
-    struct.pack_into(format, buffer, offset, *v)
-    return buffer
+ETHFRAME_HEADERS = {
+    0x0800: namedtuple('H0800', ['src', 'dst', 'type'])
+}
 
 @dataclass
 class IPv4Packet033:
-    header: struct.Struct
-    data: bytes
+    header: bytes
+    payload: bytes
 
 @dataclass
 class EthFrame033:
-    frame_data: InitVar[bytes]
-    payload: bytes = field(init=False)
-    header: bytes = field(init=False)
-    # hl: int = field(init=False)
+    header: NamedTuple
+    payload: bytes
 
-    def __post_init__(self, frame_data):
-        et = struct.unpack_from("!H", frame_data, 12)[0]
-        if et in ETHERTYPES:
-            fmt = ETHFRAME_HEADER_FORMATS[et]
-            hl = struct.calcsize(fmt)
-            self.header = struct.unpack_from(fmt, frame_data, 0)
-            self.payload = ...
+    @classmethod
+    def from_bytes(cls, frame_data):
+        e = struct.unpack_from('!H', frame_data, 12)[0] # attempts to read the ethernet type of the packet from the bytes string
+        if e in ETHERTYPES:
+            frame_header = ETHFRAME_HEADERS[e]._make(struct.unpack_from(ETHFRAME_HEADER_FORMATS[e], frame_data, 0))
+            frame_payload = frame_data[struct.calcsize(ETHFRAME_HEADER_FORMATS[e]):]
         else:
-            raise ValueError("Unrecognized ethernet type")
+            raise ValueError("unknown type")
+        
+        return cls(frame_header, frame_payload)
 
 @dataclass
 class Trace033:
     frames: List[EthFrame033]
-
-class Graph033:
-    def __init__(self, trace_data):
-        frames = []
-        for frame_data in trace_data:
-            frames.append(EthFrame033(frame_data))
-        self.root = Trace033(frames)
-
 
 class TraceAnalyser033:
     def extract_trace_data(self, tracenode):
@@ -202,12 +219,12 @@ class TraceAnalyser033:
         '''
         trace_data = []
         while tracenode != None:
-            if tracenode.children['trace'] == None:
+            if tracenode.trace == None:
                 break
             else:
-                frame_data = self.extract_framenode_data(tracenode.children['frame'])
+                frame_data = self.extract_framenode_data(tracenode.frame)
                 trace_data.append(frame_data)
-                tracenode = tracenode.children['trace']
+                tracenode = tracenode.trace
 
         return trace_data
 
@@ -216,22 +233,24 @@ class TraceAnalyser033:
         '''
         frame_data = bytearray()
         while framenode != None:
-            if framenode.children['frame'] == None:
+            if framenode.frame == None:
                 break
             else:
-                raw_data = framenode.children['frame_fragment'].children['frame_fragment_data']
+                raw_data = framenode.frame_fragment.frame_fragment_data
                 partial_data = bytes.fromhex(raw_data)
                 # in this part the frame data is reorderred
                 frame_data = extend_pack_into("{}s".format(len(partial_data))
                             , frame_data
-                            , int(bytes.fromhex(framenode.children['frame_fragment'].children['frame_fragment_offset']).hex(),16)
+                            , int(bytes.fromhex(framenode.frame_fragment.frame_fragment_offset).hex(),16)
                             , partial_data)
-                framenode = framenode.children['frame']
+                framenode = framenode.frame
 
         return frame_data
 
-
-
+    def derive_graph(self, ast):
+        frames = self.extract_trace_data(ast.root)
+        frames = list(map(EthFrame033.from_bytes, frames))
+        return Trace033(frames)
 
 def main():
     with io.open('extr.txt') as f:
@@ -239,9 +258,10 @@ def main():
         t = tp.lex(f)
         tree = tp.parse(t)
         an = TraceAnalyser033()
-        d = an.extract_trace_data(tree.children['trace'])
+        d = an.extract_trace_data(tree.root)
         f1 = d[0]
-        ethf = EthFrame033(f1)
+        frb = EthFrame033.from_bytes(f1)
+        g = an.derive_graph(tree)
         print("")
 
 if __name__ == "__main__":
