@@ -5,8 +5,9 @@ from os import name
 import struct
 import re
 from struct import pack
-from typing import List, NamedTuple, Optional, Any
+from typing import List, NamedTuple, Optional, Any, Union
 import weakref
+# import tinker
 
 # XXX: defining these as constants would probably make debugging easier
 terminals = (
@@ -90,7 +91,7 @@ nt_classes = {'frame':FrameASTNode033, 'trace':TraceASTNode033, 'frame_fragment'
 nt_delimiters = {'end_of_frame_fragment':'frame', 'end_of_frame':'trace', '$':'ast'}
 
 # regex string to tokenize lines of the file
-e = r"^(?P<frame_fragment_offset>[0-9A-Fa-f]*)\s(?P<frame_fragment_data>([0-9A-Fa-f]{2}\s)*[0-9A-Fa-f]{2}|[0-9A-Fa-f]{2})?(?P<garbage>.*)(?P<end_of_frame_fragment>\n?|$)"
+e = r"^(?P<frame_fragment_offset>[0-9A-Fa-f]{2,})\s*(?P<frame_fragment_data>((?<=\s)([0-9A-Fa-f]{2}\s)*[0-9A-Fa-f]{2})|[0-9A-Fa-f]{2})?\s*(?P<garbage>(?<=\s)[^\n]+)?(?P<end_of_frame_fragment>\n|(?<!\n)$)"
 
 class TraceFileParser033:
     def lex(self, tracefile):
@@ -99,19 +100,25 @@ class TraceFileParser033:
         tokens = []
         while(l := tracefile.readline()):
             m = re.match(e, l)
-            if m:
-                for g in m.groupdict().items():
+            if m: # if line read is matched by e
+                for g in m.groupdict().items(): # for all the key/value pair in the matchname/matchvalue
                     tokens.append(g)
+
             p = tracefile.tell() # save current cursor pos
             c = tracefile.read(1)
-            if c == '': # test for eof by reading 1 charcter
-                    tokens.append(('end_of_frame', None))
-                    break
-            while(True): # lookahead of 1 "word" after new line if it is offset 0 then insert end_of_fragment token                
+
+            if(c == '\n'):
+                tracefile.seek(p) # rewind to saved pos
+                continue # if next line is blank, continue
+
+            while(True): # lookahead of 1 "word" after new line if it is offset 0 then insert end_of_fragment token            
                 if(c != '0' and c != ' '): break
-                if(c == ' '): tokens.append(('end_of_frame', None))
+                if(c == ' '): 
+                    tokens.append(('end_of_frame', None))
+                    break # bodgy
                 c = tracefile.read(1)
             tracefile.seek(p) # rewind to saved pos
+        tokens.append(('end_of_frame', None))
         tokens.append(('$', None))
 
         return tokens
@@ -125,6 +132,7 @@ class TraceFileParser033:
         nodestack = []
         ast = TraceAST033()
 
+        print("Parser goes brrr")
         while len(stack)>0:
             s = stack.pop()
             if s in terminals:
@@ -190,24 +198,67 @@ ETH_HDR = {
     0x0800: namedtuple('H0800', ['dst', 'src', 'type'])
 }
 
-IP4_HD_STRUCT_FMT = '!BBHHHBBHII'
+IP4_PROTO = {
+    0x06: 'Transmission Control Protocol'
+}
+
+IP4_HDR_STRUCT_FMT = '!BBHHHBBHII'
 
 IP4_HDR = namedtuple('HIP4', ['version', 'ihl', 'tos', 'tlength', 'id', 'flags', 'frag_offset', 'ttl', 'proto', 'checksum', 'src', 'dst'])
 
+IP4_OPT_LENGTH = {
+    0: 1,
+    1: 1,
+    2: 11,
+    3: -1,
+    7: -1,
+    9: -1,
+    4: -1,
+    18: 12
+}
+
+TCP_HDR_STRUCT_FMT = '!HHIIBBHHH'
+
+TCP_HDR = namedtuple('HTCP', ['src_port', 'dst_port', 'seq', 'ack', 'hl', 'flags', 'win', 'chksum', 'urg'])
+
+
 @dataclass
-class IPv4Packet033:
+class TCPSegment:
     header: NamedTuple
     opt: bytes
     payload: bytes
 
     @classmethod
+    def from_bytes(cls, tcp_data):
+        l = (struct.unpack_from('!B', tcp_data, 12)[0] >> 4) * 4
+        h = struct.unpack_from(TCP_HDR_STRUCT_FMT, tcp_data, 0)
+        h = h[0:4] + (h[4] & 0xE0,) + (h[5],) + h[6:]
+        segment_header = TCP_HDR._make(h)
+        segment_opt = h[struct.calcsize(TCP_HDR_STRUCT_FMT):l]
+        segment_payload = tcp_data[l:]
+        
+        return cls(segment_header, segment_opt, segment_payload)
+
+# TODO: fix flags offsets
+@dataclass
+class IPv4Packet033:
+    header: NamedTuple
+    opt: bytes
+    payload: Union[bytes, TCPSegment]
+
+    @classmethod
     def from_bytes(cls, packet_data):
-        l = struct.unpack_from('!H', packet_data, 2)[0]
-        h = struct.unpack_from(IP4_HD_STRUCT_FMT, packet_data, 0)
-        h = (h[0] & 0xF0, h[0] & 0x0F) + h[1:4] + (h[4] & 0xE0, h[4] & 0x1F) + h[5:]
-        packet_header = IP4_HDR._make(h)
-        packet_opt = packet_data[struct.calcsize(IP4_HD_STRUCT_FMT):l]
-        packet_payload = packet_data[l:]
+        ''''''
+        p = struct.unpack_from('!B', packet_data, 9)[0]
+        if p in IP4_PROTO:
+            h = struct.unpack_from(IP4_HDR_STRUCT_FMT, packet_data, 0)
+            h = (h[0] & 0xF0, h[0] & 0x0F) + h[1:4] + (h[4] & 0xE0, h[4] & 0x1F) + h[5:] # extracts data from the fields taht are less than 1 byte long, /!\ missing first flag because not in same byte
+            packet_header = IP4_HDR._make(h)
+
+            packet_opt = packet_data[struct.calcsize(IP4_HDR_STRUCT_FMT):packet_header.ihl]
+            packet_payload = TCPSegment.from_bytes(packet_data[packet_header.ihl*4:])
+        else:
+            return packet_data
 
         return cls(packet_header, packet_opt, packet_payload)
 
@@ -215,22 +266,23 @@ class IPv4Packet033:
 @dataclass
 class EthFrame033:
     header: NamedTuple
-    payload: bytes
+    payload: Union[bytes, IPv4Packet033]
 
     @classmethod
     def from_bytes(cls, frame_data):
-        e = struct.unpack_from('!H', frame_data, 12)[0] # attempts to read the ethernet type of the packet from the bytes string
-        if e in ETH_TYPE:
+        '''Builds a EthFrame033 object from a string of bytes'''
+        e = struct.unpack_from('!H', frame_data, 12)[0] # attempts to read the ethernet type of the packet from the data
+        if e in ETH_TYPE: # if header format is known initialize the header
             frame_header = ETH_HDR[e]._make(struct.unpack_from(ETH_HDR_STRUCT_FMT[e], frame_data, 0))
             frame_payload = IPv4Packet033.from_bytes(frame_data[struct.calcsize(ETH_HDR_STRUCT_FMT[e]):])
         else:
-            raise ValueError("unknown type")
+            return frame_data # if the header format is not understood, returns the frame data instead
         
         return cls(frame_header, frame_payload)
 
 @dataclass
 class Trace033:
-    frames: List[EthFrame033]
+    frames: List[Union[bytes, EthFrame033]]
 
 class TraceAnalyser033:
     def extract_trace_data(self, tracenode):
@@ -268,12 +320,18 @@ class TraceAnalyser033:
 
     def derive_tree(self, ast):
         '''Derive a tree representing the trace from the AST produced by the parse method'''
-        frames = self.extract_trace_data(ast.root)
-        frames = list(map(EthFrame033.from_bytes, frames))
+        trace_data = self.extract_trace_data(ast.root)
+        frames = []
+        for frame_data in trace_data:
+            try:
+                frames.append(EthFrame033.from_bytes(frame_data))
+            except ValueError as e:
+                pass
+                
         return Trace033(frames)
 
 def main():
-    with io.open('extr.txt') as f:
+    with io.open('textcap.txt') as f:
         tp = TraceFileParser033()
         t = tp.lex(f)
         tree = tp.parse(t)
@@ -283,6 +341,8 @@ def main():
         frb = EthFrame033.from_bytes(f1)
         g = an.derive_tree(tree)
         print("")
+
+        
 
 if __name__ == "__main__":
     main()
