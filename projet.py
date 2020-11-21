@@ -7,7 +7,7 @@ import re
 from struct import pack
 from typing import List, NamedTuple, Optional, Any, Union
 import weakref
-# import tinker
+import curses
 
 # XXX: defining these as constants would probably make debugging easier
 terminals = (
@@ -182,6 +182,7 @@ def extend_pack_into(format, buffer, offset, *v):
     struct.pack_into(format, buffer, offset, *v)
     return buffer
 
+# The following constants
 ETH_TYPE = {
     0x0800: 'Internet Protocol version 4',
     0x0806: 'Adresse Resolution Protocol',
@@ -232,7 +233,7 @@ class TCPSegment:
     def from_bytes(cls, tcp_data):
         l = (struct.unpack_from('!B', tcp_data, 12)[0] >> 4) * 4
         h = struct.unpack_from(TCP_HDR_STRUCT_FMT, tcp_data, 0)
-        h = h[0:4] + (h[4] & 0xE0,) + (h[5],) + h[6:]
+        h = h[0:4] + (h[4] & 0xE0,) + (h[5],) + h[6:] # expand tuple from unpacked struct into tuple used to make HTCP object
         segment_header = TCP_HDR._make(h)
         segment_opt = h[struct.calcsize(TCP_HDR_STRUCT_FMT):l]
         segment_payload = tcp_data[l:]
@@ -330,19 +331,73 @@ class TraceAnalyser033:
                 
         return Trace033(frames)
 
-def main():
-    with io.open('textcap.txt') as f:
-        tp = TraceFileParser033()
-        t = tp.lex(f)
-        tree = tp.parse(t)
-        an = TraceAnalyser033()
-        d = an.extract_trace_data(tree.root)
-        f1 = d[0]
-        frb = EthFrame033.from_bytes(f1)
-        g = an.derive_tree(tree)
-        print("")
 
+UP = -1
+DOWN = 1
+
+def run_cursed_ui(stdscr, tracetree):
+    scrh, scrw = stdscr.getmaxyx()
+    fwinh = scrh-2
+    fwinw = 23
+
+    frame_win = stdscr.subwin(fwinh, fwinw, 0, 0)
+    frame_win.border()
+
+    fpadh = len(tracetree.frames)
+    fpadw = 21
+    fpadtl = (1, 1)
+    fpadbr = (fwinh-2, 21)
+    
+    tframe = 0
+    sframe = 0
+
+    frame_pad = curses.newpad(fpadh, fpadw)
+
+    fpad_refresh = lambda: frame_pad.refresh(tframe, 0, *fpadtl, *fpadbr)
+    
+    for i in range(len(tracetree.frames)):
+        frame_pad.addstr(i, 0, "{0:X} FRAME".format(i))
+    frame_pad.chgat(sframe, 0, fpadw, curses.A_STANDOUT)
+    
+    stdscr.refresh()
+    fpad_refresh()
+
+    print(fwinh)
+    while True:
+        k = stdscr.getkey()
         
+        
+        if k == "KEY_A2":   
+            frame_pad.chgat(sframe, 0, fpadw, curses.A_NORMAL)
+            sframe = max(0, sframe-1)
+            tframe = min(sframe, tframe)
+            frame_pad.chgat(sframe, 0, fpadw, curses.A_STANDOUT)
+        elif k == "KEY_C2":
+            frame_pad.chgat(sframe, 0, fpadw, curses.A_NORMAL)
+            sframe = min(fpadh-1, sframe+1)
+            tframe = max(max(sframe-fwinh+3,0), tframe)
+            frame_pad.chgat(sframe, 0, fpadw, curses.A_STANDOUT)
+        elif k == "q":
+            break
+
+        stdscr.addstr(scrh-1, 0, "sf:{} tf:{}".format(sframe, tframe))
+        frame_pad.refresh(tframe, 0, *fpadtl, *fpadbr)
+        
+        
+
+def main():
+    ftrace = io.open('textcap.txt', 'r')
+
+    parser = TraceFileParser033()
+    analyser = TraceAnalyser033()
+
+    traceast = parser.parse(parser.lex(ftrace))
+    tracetree = analyser.derive_tree(traceast)
+
+    curses.wrapper(run_cursed_ui, tracetree)
+
+    print(len(tracetree.frames)+1)
 
 if __name__ == "__main__":
     main()
+
