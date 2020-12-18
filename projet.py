@@ -98,6 +98,8 @@ class TraceFileParser033:
         '''Tokenize the tracefile and handles incorrect values
         '''
         tokens = []
+
+        print("Lexer goes brrt")
         while(l := tracefile.readline()):
             m = re.match(e, l)
             if m: # if line read is matched by e
@@ -174,7 +176,6 @@ class TraceFileParser033:
         print("Succesfully parsed input")
         return ast
 
-
 def extend_pack_into(format, buffer, offset, *v):
     '''Write bytes values into bytearray at given offset, extends the bytearray to fit the values if necessary'''
     if len(buffer) < offset + struct.calcsize(format):
@@ -182,7 +183,81 @@ def extend_pack_into(format, buffer, offset, *v):
     struct.pack_into(format, buffer, offset, *v)
     return buffer
 
-# The following constants
+TCP_HDR_STRUCT_FMT = '!HHIIBBHHH'
+
+TcpHdr = namedtuple('HTCP', ['src_port', 'dst_port', 'seq', 'ack', 'hl', 'flags', 'win', 'chksum', 'urg'])
+
+@dataclass
+class TCPSegment:
+    header: NamedTuple
+    opt: bytes
+    payload: bytes
+
+    PROTO = "tcp"
+
+    @property
+    def size(self):
+        return self.header.hl + len(self.payload)
+
+    @classmethod
+    def from_bytes(cls, tcp_data):
+        l = (struct.unpack_from('!B', tcp_data, 12)[0] >> 4) * 4
+        h = struct.unpack_from(TCP_HDR_STRUCT_FMT, tcp_data, 0)
+        h = h[0:4] + (((h[4] & 0xF0) >> 4) * 4,) + (h[5],) + h[6:] # expand tuple from unpacked struct into tuple used to make HTCP object
+        segment_header = TcpHdr._make(h)
+        segment_opt = h[struct.calcsize(TCP_HDR_STRUCT_FMT):l]
+        segment_payload = tcp_data[l:]
+        
+        return cls(segment_header, segment_opt, segment_payload)
+
+IP4_PROTO = {
+    0x06: 'Transmission Control Protocol'
+}
+
+IP4_HDR_STRUCT_FMT = '!BBHHHBBHII'
+
+Ip4Hdr = namedtuple('HIP4', ['version', 'ihl', 'tos', 'tlength', 'id', 'flags', 'frag_offset', 'ttl', 'proto', 'checksum', 'src', 'dst'])
+
+IP4_OPT_LENGTH = { # length in bytes of the most common ipv4 options
+    0: 1,
+    1: 1,
+    2: 11,
+    3: -1,
+    7: -1,
+    9: -1,
+    4: -1,
+    18: 12
+}
+
+# TODO: fix flags offsets
+@dataclass
+class IPv4Packet033:
+    header: NamedTuple
+    opt: bytes
+    payload: Union[bytes, TCPSegment]
+
+    PROTO = "ipv4"
+
+    @property
+    def size(self):
+        return self.header.ihl*4 + self.payload.size if not isinstance(self.payload, bytearray) else len(self.payload)
+
+    @classmethod
+    def from_bytes(cls, packet_data):
+        ''''''
+        p = struct.unpack_from('!B', packet_data, 9)[0]
+        if p in IP4_PROTO:
+            h = struct.unpack_from(IP4_HDR_STRUCT_FMT, packet_data, 0)
+            h = (h[0] & 0xF0, h[0] & 0x0F) + h[1:4] + (h[4] & 0xE0, h[4] & 0x1F) + h[5:] # extracts data from the fields taht are less than 1 byte long, /!\ missing first flag because not in same byte
+            packet_header = Ip4Hdr._make(h)
+
+            packet_opt = packet_data[struct.calcsize(IP4_HDR_STRUCT_FMT):packet_header.ihl]
+            packet_payload = TCPSegment.from_bytes(packet_data[packet_header.ihl*4:])
+        else:
+            return packet_data
+
+        return cls(packet_header, packet_opt, packet_payload)
+
 ETH_TYPE = {
     0x0800: 'Internet Protocol version 4',
     0x0806: 'Adresse Resolution Protocol',
@@ -195,86 +270,28 @@ ETH_HDR_STRUCT_FMT = {
     0x8100: '!6s6sHHH'
 }
 
-ETH_HDR = {
+EthHdr = {
     0x0800: namedtuple('H0800', ['dst', 'src', 'type'])
 }
-
-IP4_PROTO = {
-    0x06: 'Transmission Control Protocol'
-}
-
-IP4_HDR_STRUCT_FMT = '!BBHHHBBHII'
-
-IP4_HDR = namedtuple('HIP4', ['version', 'ihl', 'tos', 'tlength', 'id', 'flags', 'frag_offset', 'ttl', 'proto', 'checksum', 'src', 'dst'])
-
-IP4_OPT_LENGTH = {
-    0: 1,
-    1: 1,
-    2: 11,
-    3: -1,
-    7: -1,
-    9: -1,
-    4: -1,
-    18: 12
-}
-
-TCP_HDR_STRUCT_FMT = '!HHIIBBHHH'
-
-TCP_HDR = namedtuple('HTCP', ['src_port', 'dst_port', 'seq', 'ack', 'hl', 'flags', 'win', 'chksum', 'urg'])
-
-
-@dataclass
-class TCPSegment:
-    header: NamedTuple
-    opt: bytes
-    payload: bytes
-
-    @classmethod
-    def from_bytes(cls, tcp_data):
-        l = (struct.unpack_from('!B', tcp_data, 12)[0] >> 4) * 4
-        h = struct.unpack_from(TCP_HDR_STRUCT_FMT, tcp_data, 0)
-        h = h[0:4] + (h[4] & 0xE0,) + (h[5],) + h[6:] # expand tuple from unpacked struct into tuple used to make HTCP object
-        segment_header = TCP_HDR._make(h)
-        segment_opt = h[struct.calcsize(TCP_HDR_STRUCT_FMT):l]
-        segment_payload = tcp_data[l:]
-        
-        return cls(segment_header, segment_opt, segment_payload)
-
-# TODO: fix flags offsets
-@dataclass
-class IPv4Packet033:
-    header: NamedTuple
-    opt: bytes
-    payload: Union[bytes, TCPSegment]
-
-    @classmethod
-    def from_bytes(cls, packet_data):
-        ''''''
-        p = struct.unpack_from('!B', packet_data, 9)[0]
-        if p in IP4_PROTO:
-            h = struct.unpack_from(IP4_HDR_STRUCT_FMT, packet_data, 0)
-            h = (h[0] & 0xF0, h[0] & 0x0F) + h[1:4] + (h[4] & 0xE0, h[4] & 0x1F) + h[5:] # extracts data from the fields taht are less than 1 byte long, /!\ missing first flag because not in same byte
-            packet_header = IP4_HDR._make(h)
-
-            packet_opt = packet_data[struct.calcsize(IP4_HDR_STRUCT_FMT):packet_header.ihl]
-            packet_payload = TCPSegment.from_bytes(packet_data[packet_header.ihl*4:])
-        else:
-            return packet_data
-
-        return cls(packet_header, packet_opt, packet_payload)
-
 
 @dataclass
 class EthFrame033:
     header: NamedTuple
     payload: Union[bytes, IPv4Packet033]
 
+    PROTO = "ethernet"
+
+    @property
+    def size(self):
+        return struct.calcsize(ETH_HDR_STRUCT_FMT[0x0800]) + self.payload.size if not isinstance(self.payload, bytearray) else len(self.payload)
+
     @classmethod
     def from_bytes(cls, frame_data):
         '''Builds a EthFrame033 object from a string of bytes'''
+
         e = struct.unpack_from('!H', frame_data, 12)[0] # attempts to read the ethernet type of the packet from the data
         if e in ETH_TYPE: # if header format is known initialize the header
-            frame_header = ETH_HDR[e]._make(struct.unpack_from(ETH_HDR_STRUCT_FMT[e], frame_data, 0))
+            frame_header = EthHdr[e]._make(struct.unpack_from(ETH_HDR_STRUCT_FMT[e], frame_data, 0))
             frame_payload = IPv4Packet033.from_bytes(frame_data[struct.calcsize(ETH_HDR_STRUCT_FMT[e]):])
         else:
             return frame_data # if the header format is not understood, returns the frame data instead
@@ -286,20 +303,7 @@ class Trace033:
     frames: List[Union[bytes, EthFrame033]]
 
 class TraceAnalyser033:
-    def extract_trace_data(self, tracenode):
-        '''Extracts captured traffic data TraceNode033 object
-        '''
-        trace_data = []
-        while tracenode != None:
-            if tracenode.trace == None:
-                break
-            else:
-                frame_data = self.extract_framenode_data(tracenode.frame)
-                trace_data.append(frame_data)
-                tracenode = tracenode.trace
-
-        return trace_data
-
+    # TODO: add verification of contiguous data and return error if gap
     def extract_framenode_data(self, framenode):
         '''Extracts data of a FrameNode033 object
         '''
@@ -319,6 +323,20 @@ class TraceAnalyser033:
 
         return frame_data
 
+    def extract_trace_data(self, tracenode):
+        '''Extracts captured traffic data TraceNode033 object
+        '''
+        trace_data = []
+        while tracenode != None:
+            if tracenode.trace == None:
+                break
+            else:
+                frame_data = self.extract_framenode_data(tracenode.frame)
+                trace_data.append(frame_data)
+                tracenode = tracenode.trace
+
+        return trace_data
+
     def derive_tree(self, ast):
         '''Derive a tree representing the trace from the AST produced by the parse method'''
         trace_data = self.extract_trace_data(ast.root)
@@ -332,59 +350,151 @@ class TraceAnalyser033:
         return Trace033(frames)
 
 
+# code adapted from https://www.geoffreybrown.com/blog/a-hexdump-program-in-python/
+def hexdump(bytes):
+    try:
+        with io.BytesIO(bytes) as b:
+            n = 0
+            s = b.read(16)
+
+            while s:
+                s1 = " ".join([f"{i:02x}" for i in s]) # hex string
+                s1 = s1[0:23] + " " + s1[23:]          # insert extra space between groups of 8 hex values
+
+                s2 = "".join([chr(i) if 32 <= i <= 127 else "." for i in s]) # ascii string; chained comparison
+
+                print(f"{n * 16:08x}  {s1:<48}  |{s2}|")
+
+                n += 1
+                s = b.read(16)
+    except Exception as e:
+        pass
+
+
 UP = -1
 DOWN = 1
 
+known_protocols = {"ethernet", "ipv4", "tcp", "http", "unknown"}
+
 def run_cursed_ui(stdscr, tracetree):
-    scrh, scrw = stdscr.getmaxyx()
-    fwinh = scrh-2
-    fwinw = 23
+    stdscrh, stdscrw = stdscr.getmaxyx()
 
-    frame_win = stdscr.subwin(fwinh, fwinw, 0, 0)
-    frame_win.border()
-
-    fpadh = len(tracetree.frames)
-    fpadw = 21
-    fpadtl = (1, 1)
-    fpadbr = (fwinh-2, 21)
+    frmwinh = stdscrh-2
+    frmwinw = 40
+    frmwinx = 0
+    frmwiny = 0
     
-    tframe = 0
-    sframe = 0
+    frmwin = stdscr.subwin(frmwinh, frmwinw, frmwiny, frmwinx)
+    frmwin.border()
 
-    frame_pad = curses.newpad(fpadh, fpadw)
+    frmpadh = len(tracetree.frames)
+    frmpadw = frmwinw-2
+    frmpadtl = (frmwiny+1, frmwinx+1) # position of top left corner of pad on screen
+    frmpadbr = (frmwinh-2, frmwinw-2) # position of bottom right corner
 
-    fpad_refresh = lambda: frame_pad.refresh(tframe, 0, *fpadtl, *fpadbr)
+    frmpad = curses.newpad(frmpadh, frmpadw)
+    frmpad_refresh = lambda: frmpad.refresh(topfrmidx, 0, *frmpadtl, *frmpadbr)
+
+    hdrwinh = stdscrh-2
+    hdrwinw = 20
+    hdrwinx = frmwinx+frmwinw
+    hdrwiny = 0
+
+    hdrwin = stdscr.subwin(hdrwinh, hdrwinw, hdrwiny, hdrwinx)
+    hdrwin.border()
+
+    hdrpadh = hdrwinh-2
+    hdrpadw = hdrwinw-2
+    hdrpadtl = (hdrwiny+1, hdrwinx+1)
+    hdrpadbr = (hdrwinh-2, hdrwinx+hdrwinw-2)
+
+    hdrpad = curses.newpad(hdrpadh, hdrpadw)
+    hdrpad_refresh = lambda: hdrpad.refresh(0, 0, *hdrpadtl, *hdrpadbr)
     
-    for i in range(len(tracetree.frames)):
-        frame_pad.addstr(i, 0, "{0:X} FRAME".format(i))
-    frame_pad.chgat(sframe, 0, fpadw, curses.A_STANDOUT)
+    topfrmidx = 0
+    selfrmidx = 0
+    maxfrmidx = len(tracetree.frames)
+  
+    # populate the frame list into the the frame pad
+    i = 0
+    for f in tracetree.frames:
+        p = f.payload
+        protos = "eth:"
+        while True:
+            protos += p.PROTO if hasattr(p, "PROTO") else "unknown"
+            if hasattr(p, "payload") and p.payload != None:
+                protos += ":"
+                p = p.payload
+            else:
+                break
+        s = f"0x{i:04x} " + protos + f" {f.size}"
+        frmpad.addstr(i, 0, s)
+        i += 1
+    frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_STANDOUT)
     
     stdscr.refresh()
-    fpad_refresh()
+    frmpad_refresh()
 
-    print(fwinh)
+    print(hdrpadh, hdrpadw, hdrpadtl, hdrpadbr) # debug
+
     while True:
+    
+        # populate the protocols list in the hader pad
+        hdrpad.erase()
+        p = tracetree.frames[selfrmidx]
+        layer = 0
+        while True:
+            proto = p.PROTO if hasattr(p, "PROTO") else "unknown"
+            hdrpad.addstr(layer, 0, proto)
+            if hasattr(p, "payload") and p.payload != None:
+                p = p.payload
+            else:
+                break
+            layer += 1 
+        hdrpad_refresh()
+
         k = stdscr.getkey()
         
-        
         if k == "KEY_A2":   
-            frame_pad.chgat(sframe, 0, fpadw, curses.A_NORMAL)
-            sframe = max(0, sframe-1)
-            tframe = min(sframe, tframe)
-            frame_pad.chgat(sframe, 0, fpadw, curses.A_STANDOUT)
+            frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_NORMAL)
+            selfrmidx = max(0, selfrmidx-1)
+            topfrmidx = min(selfrmidx, topfrmidx)
+            frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_STANDOUT)
         elif k == "KEY_C2":
-            frame_pad.chgat(sframe, 0, fpadw, curses.A_NORMAL)
-            sframe = min(fpadh-1, sframe+1)
-            tframe = max(max(sframe-fwinh+3,0), tframe)
-            frame_pad.chgat(sframe, 0, fpadw, curses.A_STANDOUT)
+            frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_NORMAL)
+            selfrmidx = min(frmpadh-1, selfrmidx+1)
+            topfrmidx = max(max(selfrmidx-frmwinh+3,0), topfrmidx)
+            frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_STANDOUT)
+        elif k == "\n": # enter header menu
+            selhdridx = 0
+            maxhdridx = layer
+            hdrpad.chgat(selhdridx, 0, hdrpadw, curses.A_STANDOUT)
+            hdrpad_refresh()
+            while True:
+                k = stdscr.getkey()
+                if k == "KEY_A2":   
+                    hdrpad.chgat(selhdridx, 0, hdrpadw, curses.A_NORMAL)
+                    selhdridx = max(0, selhdridx-1)
+                    hdrpad.chgat(selhdridx, 0, hdrpadw, curses.A_STANDOUT)
+                elif k == "KEY_C2":
+                    hdrpad.chgat(selhdridx, 0, hdrpadw, curses.A_NORMAL)
+                    selhdridx = min(maxhdridx, selhdridx+1)
+                    hdrpad.chgat(selhdridx, 0, hdrpadw, curses.A_STANDOUT)
+                elif k == "a":
+                    break
+                hdrpad_refresh()
+            continue
         elif k == "q":
             break
+        else: # debug
+            print(k)
 
-        stdscr.addstr(scrh-1, 0, "sf:{} tf:{}".format(sframe, tframe))
-        frame_pad.refresh(tframe, 0, *fpadtl, *fpadbr)
+        stdscr.move(stdscrh-1, 0)
+        stdscr.clrtoeol()
+        stdscr.addstr(stdscrh-1, 0, "sf:{} tf:{}".format(selfrmidx, topfrmidx))
+        frmpad_refresh()
         
         
-
 def main():
     ftrace = io.open('textcap.txt', 'r')
 
