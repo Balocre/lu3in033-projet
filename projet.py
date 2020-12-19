@@ -218,7 +218,8 @@ IP4_HDR_STRUCT_FMT = '!BBHHHBBHII'
 
 Ip4Hdr = namedtuple('HIP4', ['version', 'ihl', 'tos', 'tlength', 'id', 'flags', 'frag_offset', 'ttl', 'proto', 'checksum', 'src', 'dst'])
 
-IP4_OPT_LENGTH = { # length in bytes of the most common ipv4 options
+IP4_OPT_LEN = { # length in bytes of the most common ipv4 options
+                # -1 is "variable"
     0: 1,
     1: 1,
     2: 11,
@@ -376,11 +377,24 @@ DOWN = 1
 
 known_protocols = {"ethernet", "ipv4", "tcp", "http", "unknown"}
 
+etht = {"dst", "src", "type"}
+
+#   p = ?
+#   fidx = 0
+#   h = p.header
+#   for field in h.__dict__.items()
+#       s = f"{field[0]} : {field[1]}"
+#       fldpad.addstr(fidx, 0, s)
+#       fidx += 1
+
+
+
 def run_cursed_ui(stdscr, tracetree):
     stdscrh, stdscrw = stdscr.getmaxyx()
 
+    # frame menu
     frmwinh = stdscrh-2
-    frmwinw = 40
+    frmwinw = 50
     frmwinx = 0
     frmwiny = 0
     
@@ -395,6 +409,7 @@ def run_cursed_ui(stdscr, tracetree):
     frmpad = curses.newpad(frmpadh, frmpadw)
     frmpad_refresh = lambda: frmpad.refresh(topfrmidx, 0, *frmpadtl, *frmpadbr)
 
+    # header menu
     hdrwinh = stdscrh-2
     hdrwinw = 20
     hdrwinx = frmwinx+frmwinw
@@ -410,7 +425,24 @@ def run_cursed_ui(stdscr, tracetree):
 
     hdrpad = curses.newpad(hdrpadh, hdrpadw)
     hdrpad_refresh = lambda: hdrpad.refresh(0, 0, *hdrpadtl, *hdrpadbr)
-    
+
+    # field infos
+    fldwinh = stdscrh-2
+    fldwinw = stdscrw-(hdrwinx+hdrwinw)
+    fldwinx = hdrwinw+hdrwinx
+    fldwiny = 0
+
+    fldpadh = fldwinh-2
+    fldpadw = fldwinw-2
+    fldpadtl = (fldwiny+1, fldwinx+1)
+    fldpadbr = (fldwinh-2, fldwinx+fldwinw-2)
+
+    fldpad = curses.newpad(fldpadh, fldpadw)
+    fldpad_refresh = lambda: fldpad.refresh(0, 0, *fldpadtl, *fldpadbr)
+
+    fldwin = stdscr.subwin(fldwinh, fldwinw, fldwiny, fldwinx)
+    fldwin.border()
+
     topfrmidx = 0
     selfrmidx = 0
     maxfrmidx = len(tracetree.frames)
@@ -418,8 +450,8 @@ def run_cursed_ui(stdscr, tracetree):
     # populate the frame list into the the frame pad
     i = 0
     for f in tracetree.frames:
-        p = f.payload
-        protos = "eth:"
+        p = f
+        protos = ""
         while True:
             protos += p.PROTO if hasattr(p, "PROTO") else "unknown"
             if hasattr(p, "payload") and p.payload != None:
@@ -437,6 +469,7 @@ def run_cursed_ui(stdscr, tracetree):
 
     print(hdrpadh, hdrpadw, hdrpadtl, hdrpadbr) # debug
 
+    # main UI loop
     while True:
     
         # populate the protocols list in the hader pad
@@ -465,9 +498,9 @@ def run_cursed_ui(stdscr, tracetree):
             selfrmidx = min(frmpadh-1, selfrmidx+1)
             topfrmidx = max(max(selfrmidx-frmwinh+3,0), topfrmidx)
             frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_STANDOUT)
-        elif k == "\n": # enter header menu
+        elif k == "\n" or k == "KEY_B3": # enter header menu
             selhdridx = 0
-            maxhdridx = layer
+            maxhdridx = layer # maybe rename layer
             hdrpad.chgat(selhdridx, 0, hdrpadw, curses.A_STANDOUT)
             hdrpad_refresh()
             while True:
@@ -480,7 +513,7 @@ def run_cursed_ui(stdscr, tracetree):
                     hdrpad.chgat(selhdridx, 0, hdrpadw, curses.A_NORMAL)
                     selhdridx = min(maxhdridx, selhdridx+1)
                     hdrpad.chgat(selhdridx, 0, hdrpadw, curses.A_STANDOUT)
-                elif k == "a":
+                elif k == "KEY_B1":
                     break
                 hdrpad_refresh()
             continue
