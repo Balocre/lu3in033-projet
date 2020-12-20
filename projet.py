@@ -9,21 +9,7 @@ from typing import List, NamedTuple, Optional, Any, Union
 import weakref
 import curses
 
-# XXX: defining these as constants would probably make debugging easier
-terminals = (
-    'frame_fragment_offset',
-    'frame_fragment_data',
-    'garbage',
-    'end_of_frame_fragment',
-    'end_of_frame'
-)
-
-# frames really are "partial frames"
-non_terminals = (
-    'frame',
-    'trace',
-    'frame_fragment'
-)
+# context-free LL1 grammar associated with the trace file
 
 # Grammar
 # S -> T
@@ -32,11 +18,30 @@ non_terminals = (
 # G -> frame_fragment_offset frame_fragment_data garbage end_of_fragment
 # $ -> EOF
 
+# set of terminal symbols of the grammar
+terminals = {
+    'frame_fragment_offset',
+    'frame_fragment_data',
+    'garbage',
+    'end_of_frame_fragment',
+    'end_of_frame'
+}
+
+# set of non-terminal symbols of the grammar
+non_terminals = {
+    'frame',
+    'trace',
+    'frame_fragment'
+}
+
+# axiom of the grammar (not used)
 axiom = 'trace' # S -> T
 
+# end-of-input special symbol
 end_of_input = '$'
 
-# production rules are of the form ('element on the stack', 'element on the input'):['leftmost element', ..., 'rightmost element']
+# production rules
+# they are of the form ('element on the stack', 'element on the input'):['leftmost element', ..., 'rightmost element']
 productions = { ('trace', 'frame_fragment_offset'):['frame', 'end_of_frame', 'trace']
         , ('trace', '$'):[]
         , ('trace', 'end_of_frame'):['frame', 'end_of_frame', 'trace']
@@ -45,20 +50,46 @@ productions = { ('trace', 'frame_fragment_offset'):['frame', 'end_of_frame', 'tr
         , ('frame_fragment', 'frame_fragment_offset'):['frame_fragment_offset', 'frame_fragment_data', 'garbage']
         }
 
+
 # AST structures definitions
+# the following classes represents the various nodes that can be found in the
+# Abstract Syntax Tree derived from the parsing of the trace file
 
 @dataclass
 class FragmentASTNode033:
-    '''Represents a fragment node in the AST'''
+    '''Represents a frame fragment node in the AST
+    
+    Args:
+        parent (weakref.ReferenceType): Reference to the parent of the node
+        frame_fragment_offset (str, optional): Byte string whose value is
+            the offset of the frame fragment in the frame
+        frame_fragment_data (str, optional): Byte string whose value is the
+            data conatined by the frame fragment
+        garbage (str, optional): Byte string that represents the ascii text that
+            can be found at the end of the lines
+    '''
 
     parent: weakref.ReferenceType
     frame_fragment_offset: Optional[str] = None
     frame_fragment_data: Optional[str] = None
     garbage: Optional[str] = None
 
+
 @dataclass
 class FrameASTNode033:
-    '''Represents a frame node in the AST'''
+    '''Represents a frame node in the AST
+    
+    Args:
+        parent (weakref.ReferenceType): Reference to the parent of the node
+        frame_fragment (FragmentASTNode033, optional): Represents the leftmost
+            part of a frame in the production rule F
+        frame (Any, optional) : Represents the rightmost part of the frame in
+            the production rule F
+
+    Note:
+        The type of frame should be FrameASTNode033, but python does not support
+            forward declaration
+    '''
 
     parent: weakref.ReferenceType
     frame_fragment: Optional[FragmentASTNode033] = None
@@ -67,7 +98,15 @@ class FrameASTNode033:
 
 @dataclass
 class TraceASTNode033:
-    '''Represents a trace node in the AST'''
+    '''Represents a trace node in the AST
+    
+    Args:
+        parent (weakref.ReferenceType): Reference to the parent of the node
+        frame (FrameASTNode033, optional) : Represents the frame in the
+            production rule T
+        trace (Any, optional): represents the rest of the trace in the
+            production rule T
+    '''
 
     parent: Optional[weakref.ReferenceType] = None
     frame: Optional[FrameASTNode033] = None
@@ -75,12 +114,13 @@ class TraceASTNode033:
 
 @dataclass
 class TraceAST033:
-    '''Represents the root of the AST'''
+    '''Represents the AST
+    
+    Args:
+        root (:obj:`TraceASTNode033`): The root of the AST
+    '''
 
     root: Optional[TraceASTNode033] = None
-
-    def set_root(self, root):
-        self.root = root
 
 # classes associated to each nt
 # XXX: worth exploring classes as key of the dict?
@@ -90,12 +130,15 @@ nt_classes = {'frame':FrameASTNode033, 'trace':TraceASTNode033, 'frame_fragment'
 #tokens that indicate the limit of associated nt
 nt_delimiters = {'end_of_frame_fragment':'frame', 'end_of_frame':'trace', '$':'ast'}
 
-# regex string to tokenize lines of the file
+# regex used to tokenize the lines
 e = r"^(?P<frame_fragment_offset>[0-9A-Fa-f]{2,})\s*(?P<frame_fragment_data>((?<=\s)([0-9A-Fa-f]{2}\s)*[0-9A-Fa-f]{2})|[0-9A-Fa-f]{2})?\s*(?P<garbage>(?<=\s)[^\n]+)?(?P<end_of_frame_fragment>\n|(?<!\n)$)"
 
 class TraceFileParser033:
     def lex(self, tracefile):
         '''Tokenize the tracefile and handles incorrect values
+
+        Args:
+            tracefile (:obj:`io.FileIO`): File object of the trace
         '''
         tokens = []
 
@@ -127,6 +170,10 @@ class TraceFileParser033:
 
     def parse(self, tokens):
         '''Validates the input and builds the Abstract Syntax Tree of the file
+
+        Args:
+            tokens (:obj:`list` of :obj:`str`): List of tokens returned by the
+                lexer
         '''
         stack = ['$', 'trace'] # rightmost element is on the left
         i = 0
@@ -163,10 +210,9 @@ class TraceFileParser033:
                     raise ValueError("bad rule")
 
                 # AST logic 
-                
                 if len(nodestack) == 0:
                     node = nt_classes[s]()
-                    ast.set_root(node)
+                    ast.root = node
                 else:
                     node = nt_classes[s](None) # TODO: find a way to get a hold of parent ref
                     #node.parent = weakref.proxy(nodestack[-1]) # parent is node on top of the stack
@@ -210,6 +256,7 @@ class TCPSegment:
         
         return cls(segment_header, segment_opt, segment_payload)
 
+# dict of the codes:description of the protocol recognized by the analyzer
 IP4_PROTO = {
     0x06: 'Transmission Control Protocol'
 }
@@ -218,8 +265,9 @@ IP4_HDR_STRUCT_FMT = '!BBHHHBBHII'
 
 Ip4Hdr = namedtuple('HIP4', ['version', 'ihl', 'tos', 'tlength', 'id', 'flags', 'frag_offset', 'ttl', 'proto', 'checksum', 'src', 'dst'])
 
-IP4_OPT_LEN = { # length in bytes of the most common ipv4 options
-                # -1 is "variable"
+# dict of the optcode:length of the options recognized by the analyzer
+# length = -1 is variable
+IP4_OPT_LEN = {
     0: 1,
     1: 1,
     2: 11,
@@ -249,7 +297,7 @@ class IPv4Packet033:
         p = struct.unpack_from('!B', packet_data, 9)[0]
         if p in IP4_PROTO:
             h = struct.unpack_from(IP4_HDR_STRUCT_FMT, packet_data, 0)
-            h = (h[0] & 0xF0, h[0] & 0x0F) + h[1:4] + (h[4] & 0xE0, h[4] & 0x1F) + h[5:] # extracts data from the fields taht are less than 1 byte long, /!\ missing first flag because not in same byte
+            h = (h[0] >> 4, h[0] & 0x0F) + h[1:4] + (h[4] & 0xE0, h[4] & 0x1F) + h[5:] # extracts data from the fields taht are less than 1 byte long, /!\ missing first flag because not in same byte
             packet_header = Ip4Hdr._make(h)
 
             packet_opt = packet_data[struct.calcsize(IP4_HDR_STRUCT_FMT):packet_header.ihl]
@@ -261,14 +309,10 @@ class IPv4Packet033:
 
 ETH_TYPE = {
     0x0800: 'Internet Protocol version 4',
-    0x0806: 'Adresse Resolution Protocol',
-    0x8100: 'IEE 802.1Q / IEEE 802.1aq'
 }
 
 ETH_HDR_STRUCT_FMT = {
     0x0800: '!6s6sH',
-    0x0806: '!HHBBHI???', #invalid
-    0x8100: '!6s6sHHH'
 }
 
 EthHdr = {
@@ -379,16 +423,6 @@ known_protocols = {"ethernet", "ipv4", "tcp", "http", "unknown"}
 
 etht = {"dst", "src", "type"}
 
-#   p = ?
-#   fidx = 0
-#   h = p.header
-#   for field in h.__dict__.items()
-#       s = f"{field[0]} : {field[1]}"
-#       fldpad.addstr(fidx, 0, s)
-#       fidx += 1
-
-
-
 def run_cursed_ui(stdscr, tracetree):
     stdscrh, stdscrw = stdscr.getmaxyx()
 
@@ -448,8 +482,10 @@ def run_cursed_ui(stdscr, tracetree):
     maxfrmidx = len(tracetree.frames)
   
     # populate the frame list into the the frame pad
+    frames = []
+    frames = tracetree.frames
     i = 0
-    for f in tracetree.frames:
+    for f in frames:
         p = f
         protos = ""
         while True:
@@ -471,20 +507,35 @@ def run_cursed_ui(stdscr, tracetree):
 
     # main UI loop
     while True:
-    
-        # populate the protocols list in the hader pad
+        selhdridx = 0
+
         hdrpad.erase()
-        p = tracetree.frames[selfrmidx]
+        fldpad.erase()
+    
+        # populate the protocols list in the header pad
+        protocols = []
+        pl = tracetree.frames[selfrmidx]
         layer = 0
         while True:
-            proto = p.PROTO if hasattr(p, "PROTO") else "unknown"
+            protocols.append(pl)
+            proto = pl.PROTO if hasattr(pl, "PROTO") else "unknown"
             hdrpad.addstr(layer, 0, proto)
-            if hasattr(p, "payload") and p.payload != None:
-                p = p.payload
+            if hasattr(pl, "payload") and (pl.payload != None and not isinstance(pl.payload, bytearray)):
+                pl = pl.payload
             else:
                 break
             layer += 1 
         hdrpad_refresh()
+
+        p = protocols[selhdridx]
+        fidx = 0
+        h = p.header
+        t = h._asdict()
+        for field in h._asdict().items():
+            s = f"{field[0]} : {field[1]}"
+            fldpad.addstr(fidx, 0, s)
+            fidx += 1
+        fldpad_refresh()
 
         k = stdscr.getkey()
         
@@ -499,12 +550,15 @@ def run_cursed_ui(stdscr, tracetree):
             topfrmidx = max(max(selfrmidx-frmwinh+3,0), topfrmidx)
             frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_STANDOUT)
         elif k == "\n" or k == "KEY_B3": # enter header menu
-            selhdridx = 0
+
             maxhdridx = layer # maybe rename layer
             hdrpad.chgat(selhdridx, 0, hdrpadw, curses.A_STANDOUT)
             hdrpad_refresh()
             while True:
+                fldpad.erase()
+
                 k = stdscr.getkey()
+
                 if k == "KEY_A2":   
                     hdrpad.chgat(selhdridx, 0, hdrpadw, curses.A_NORMAL)
                     selhdridx = max(0, selhdridx-1)
@@ -515,6 +569,17 @@ def run_cursed_ui(stdscr, tracetree):
                     hdrpad.chgat(selhdridx, 0, hdrpadw, curses.A_STANDOUT)
                 elif k == "KEY_B1":
                     break
+
+                p = protocols[selhdridx]
+                fidx = 0
+                h = p.header
+                t = h._asdict()
+                for field in h._asdict().items():
+                    s = f"{field[0]} : {field[1]}"
+                    fldpad.addstr(fidx, 0, s)
+                    fidx += 1
+
+                fldpad_refresh()
                 hdrpad_refresh()
             continue
         elif k == "q":
