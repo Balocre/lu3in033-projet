@@ -8,6 +8,7 @@ import struct
 import re
 from struct import pack
 from typing import List, NamedTuple, Optional, Any, Union
+import warnings
 import weakref
 import curses
 
@@ -233,13 +234,6 @@ class TraceFileParser033:
         print("Succesfully parsed input")
         return ast
 
-def extend_pack_into(format, buffer, offset, *v):
-    '''Write bytes values into bytearray at given offset, extends the bytearray to fit the values if necessary'''
-    if len(buffer) < offset + struct.calcsize(format):
-        buffer = buffer.ljust(offset + struct.calcsize(format), b'\xff') # padding character is 0xff
-    struct.pack_into(format, buffer, offset, *v)
-    return buffer
-
 @dataclass
 class HttpMessage:
     header_data: bytes
@@ -268,17 +262,14 @@ class HttpMessage:
 
         return cls(http_header, http_message)
 
-    
+# list of well known application ports
 TCP_KNOWN_PORTS = {
     80: HttpMessage
 }
 
 TCP_HDR_STRUCT_FMT = '!2s2s4s4s2s2s2s2s'
-# '!2s2s4s4s2s2s2s2s'
 
 TcpHdr = namedtuple('HTCP', ['src_port', 'dst_port', 'seq', 'acknum', 'hl', 'flags', 'ecn', 'cwr', 'ece', 'urg', 'ack', 'psh', 'rst', 'syn', 'fin', 'win', 'chksum', 'urgp'])
-# ['src_port', 'dst_port', 'seq', 'ack', 'hl', 'flags', 'ecn', 'cwr', 'ece', 'urg', 'ack', 'psh', 'rst', 'syn', 'fin', 'win', 'chksum', 'urg']
-
 @dataclass
 class TCPSegment033:
     '''Represents a TCP segment
@@ -302,32 +293,28 @@ class TCPSegment033:
     def header(self):
         h = struct.unpack(TCP_HDR_STRUCT_FMT, self.header_data)
 
-        # + bytes([(h[4][0] & 01)],) \
-        # + bytes([(h[4][1] & 80)],) \
-        # + bytes([(h[4][1] & 40)],) \
-        # + bytes([(h[4][1] & 20)],) \
-        # + bytes([(h[4][1] & 10)],) \
-        # + bytes([(h[4][1] & 08)],) \
-        # + bytes([(h[4][1] & 04)],) \
-        # + bytes([(h[4][1] & 02)],) \
-        # + bytes([(h[4][1] & 01)],) \
+        # expand header length and flags
         h = h[0:4] \
             + (bytes([(h[4][0] & 0xF0) >> 4]),) \
             + (bytes([h[4][0] & 0x0F, h[4][1] & 0xFF]),) \
-            + (bytes([h[4][0] & 0x01]),) \
-            + (bytes([h[4][1] & 0x80]),) \
-            + (bytes([h[4][1] & 0x40]),) \
-            + (bytes([h[4][1] & 0x20]),) \
-            + (bytes([h[4][1] & 0x10]),) \
-            + (bytes([h[4][1] & 0x08]),) \
-            + (bytes([h[4][1] & 0x04]),) \
-            + (bytes([h[4][1] & 0x02]),) \
-            + (bytes([h[4][1] & 0x01]),) \
+            + (bytes([(h[4][0] & 0x01)]),) \
+            + (bytes([(h[4][1] & 0x80) >> 7]),) \
+            + (bytes([(h[4][1] & 0x40) >> 6]),) \
+            + (bytes([(h[4][1] & 0x20) >> 5]),) \
+            + (bytes([(h[4][1] & 0x10) >> 4]),) \
+            + (bytes([(h[4][1] & 0x08) >> 3]),) \
+            + (bytes([(h[4][1] & 0x04) >> 2]),) \
+            + (bytes([(h[4][1] & 0x02) >> 1]),) \
+            + (bytes([(h[4][1] & 0x01)]),) \
             + h[5:]
         return TcpHdr._make(h)
 
     @classmethod
     def from_bytes(cls, tcp_data):
+        if len(tcp_data) < 20:
+            warnings.warn("Malformed segment: header is incomplete, can't parse segment", BytesWarning)
+            return bytes(tcp_data)
+
         hl = (struct.unpack_from('!B', tcp_data, 12)[0] >> 4) * 4
         src = struct.unpack_from('!H', tcp_data, 0)[0]
         dst = struct.unpack_from('!H', tcp_data, 2)[0]
@@ -385,7 +372,6 @@ class IPv4Packet033:
                 + len(self.opt_data) \
                 + self.payload.size if not isinstance(self.payload, bytes) else len(self.payload)
 
-
     @property
     def header(self):
         ''''''
@@ -399,6 +385,13 @@ class IPv4Packet033:
     @classmethod
     def from_bytes(cls, packet_data):
         ''''''
+        tl = struct.unpack_from('!H', packet_data, 2)[0]
+        if len(packet_data) < 20:
+            warnings.warn("Malformed packet: header is incomplete, can't parse packet", BytesWarning)
+            return bytes(packet_data)
+        if len(packet_data) != tl:
+            warnings.warn("Malformed packet: some data is missing, can't parse packet", BytesWarning)
+            return bytes(packet_data)
 
         hl = (struct.unpack_from('!B', packet_data, 0)[0] & 0x0F) * 4
         proto = struct.unpack_from('!B', packet_data, 9)[0]
@@ -444,6 +437,7 @@ class EthFrame033:
         if e in ETH_TYPE: # if header format is known initialize the header
             return EthHdr[e]._make(struct.unpack(ETH_HDR_STRUCT_FMT[e], self.header_data))
         else:
+            warnings.warn("Unknow ether type: can't parse frame")
             return self.header_data # if the header format is not understood, returns the frame data instead
 
     @classmethod
@@ -464,6 +458,14 @@ class EthFrame033:
 class Trace033:
     frames: List[Union[bytes, EthFrame033]]
 
+
+def extend_pack_into(format, buffer, offset, *v):
+    '''Write bytes values into bytearray at given offset, extends the bytearray to fit the values if necessary'''
+    if len(buffer) < offset + struct.calcsize(format):
+        buffer = buffer.ljust(offset + struct.calcsize(format), b'\xff') # padding character is 0xff
+    struct.pack_into(format, buffer, offset, *v)
+    return buffer
+
 class TraceAnalyser033:
     # TODO: add verification of contiguous data and return error if gap
     def extract_framenode_data(self, framenode):
@@ -476,6 +478,14 @@ class TraceAnalyser033:
             else:
                 raw_data = framenode.frame_fragment.frame_fragment_data
                 partial_data = bytes.fromhex(raw_data)
+
+                if framenode.frame.frame_fragment != None: # if next frame contains no fragment that means code reached end of frame structure
+                    nextoff = int(framenode.frame.frame_fragment.frame_fragment_offset, 16)
+                    curoff = int(framenode.frame_fragment.frame_fragment_offset, 16)
+                    if curoff + len(partial_data) != nextoff:
+                        raise ValueError("Frame data is not contiguous")
+                        warnings.warn("Frame is incomplete, some data is missing")
+
                 # in this part the frame data is reorderred
                 frame_data = extend_pack_into("{}s".format(len(partial_data))
                             , frame_data
@@ -489,13 +499,21 @@ class TraceAnalyser033:
         '''Extracts captured traffic data TraceNode033 object
         '''
         trace_data = []
+        i = 0
         while tracenode != None:
             if tracenode.trace == None:
                 break
             else:
-                frame_data = self.extract_framenode_data(tracenode.frame)
-                trace_data.append(frame_data)
-                tracenode = tracenode.trace
+                try:
+                    frame_data = self.extract_framenode_data(tracenode.frame)
+                    trace_data.append(frame_data)
+                except ValueError as e:
+                    warnings.warn(f"Can't parse frame {i:x}")
+                finally:
+                    tracenode = tracenode.trace
+                    i += 1
+
+                    
 
         return trace_data
 
@@ -558,6 +576,15 @@ pretty_names = {
                         , "acknum": "acknowledgement number: 0x{1:x} - {1:d}"
                         , "hl": "header length: 0x{1:x} - {1:d}"
                         , "flags": "flags: 0x{1:x} - {1:d}"
+                        , "ecn": "...{1:d} .... .... - Nonce"
+                        , "cwr": ".... {1:d}... .... - Congestion Window Reduced"
+                        , "ece": ".... .{1:d}.. .... - ECN-Echo"
+                        , "urg": ".... ..{1:d}. .... - Urgent"
+                        , "ack": ".... ...{1:d} .... - Acknowledgement"
+                        , "psh": ".... .... {1:d}... - Push"
+                        , "rst": ".... .... .{1:d}.. - Reset"
+                        , "syn": ".... .... ..{1:d}. - Syn"
+                        , "fin": ".... .... ...{1:d} - Fin"
                         , "win": "window: 0x{1:x} - {1:d}"
                         , "chksum": "checksum: 0x{1:x} - {1:d}"
                         , "urgp": "urgent pointer: 0x{1:x} - {1:d}"}
@@ -721,29 +748,6 @@ def run_cursed_ui(stdscr, tracetree):
                                     .format(field_value, int(field_value.hex(), 16))
                         fldpad.addstr(fldidx, 0, s)
                         fldidx += 1
-
-                # if type(p) in pretty_names:
-                #     fldpad.resize(len(h._asdict()), fldpadw)
-                #     for field_name, field_value in h._asdict().items():
-                #         s = pretty_names[type(p)][field_name].format(field_value, int(field_value.hex(), 16))
-                #         fldpad.addstr(fldidx, 0, s)
-                #         fldidx += 1
-                # elif type(p) == HttpMessage:
-                #     buf = io.StringIO(p.header)
-                #     n = 0
-                #     while l := buf.readline(fldpadw):
-                #         n+=1
-                #     buf.seek(0)
-                #     fldpad.resize(n, fldpadw)
-                #     i = 0
-                #     while l := buf.readline(fldpadw):
-                #         fldpad.addstr(i, 0, l)
-                #         i+=1
-                # else:
-                #     for field in h._asdict().items():
-                #         s = f"{field[0]} : {field[1].hex()}"
-                #         fldpad.addstr(fldidx, 0, s)
-                #         fldidx += 1
 
                 fldpad_refresh()
 
