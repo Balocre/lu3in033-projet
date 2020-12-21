@@ -140,9 +140,18 @@ class TraceFileParser033:
         Args:
             tracefile (:obj:`io.FileIO`): File object of the trace
         '''
-        tokens = []
 
         print("Lexer goes brrt")
+        tokens = []
+
+        while True: # skip lines until beginning of first frame is found
+            p = tracefile.tell()
+            l = tracefile.readline()
+            m = re.match(e, l)
+            if m != None:
+                tracefile.seek(p)
+                break
+
         while(l := tracefile.readline()):
             m = re.match(e, l)
             if m: # if line read is matched by e
@@ -152,11 +161,11 @@ class TraceFileParser033:
             p = tracefile.tell() # save current cursor pos
             c = tracefile.read(1)
 
-            if(c == '\n'):
+            if(c == '\n'): # if next line is blank, continue
                 tracefile.seek(p) # rewind to saved pos
-                continue # if next line is blank, continue
+                continue
 
-            while(True): # lookahead of 1 "word" after new line if it is offset 0 then insert end_of_fragment token            
+            while(True): # look for a sequence of contiguous zeros        
                 if(c != '0' and c != ' '): break
                 if(c == ' '): 
                     tokens.append(('end_of_frame', None))
@@ -229,43 +238,67 @@ def extend_pack_into(format, buffer, offset, *v):
     struct.pack_into(format, buffer, offset, *v)
     return buffer
 
-TCP_HDR_STRUCT_FMT = '!HHIIBBHHH'
+TCP_HDR_STRUCT_FMT = '!2s2s4s4s2s2s2s2s'
+# '!2s2s4s4s2s2s2s2s'
 
 TcpHdr = namedtuple('HTCP', ['src_port', 'dst_port', 'seq', 'ack', 'hl', 'flags', 'win', 'chksum', 'urg'])
+# ['src_port', 'dst_port', 'seq', 'ack', 'hl', 'ecn', 'cwr', 'ece', 'urg', 'ack', 'psh', 'rst', 'syn', 'fin', 'win', 'chksum', 'urg']
 
 @dataclass
-class TCPSegment:
-    header: NamedTuple
-    opt: bytes
+class TCPSegment033:
+    '''Represents a TCP segment
+
+    Args:
+
+    '''
+    header_data: bytes
+    opt_data: bytes
     payload: bytes
 
     PROTO = "tcp"
 
     @property
     def size(self):
-        return self.header.hl + len(self.payload)
+        return len(self.header_data) + len(self.payload)
+
+    @property
+    def header(self):
+        h = struct.unpack(TCP_HDR_STRUCT_FMT, self.header_data)
+        # (h[4][0] & F0) >> 4
+        # (h[4][0] & 01)
+        # (h[4][1] & 80)
+        # (h[4][1] & 40)
+        # (h[4][1] & 20)
+        # (h[4][1] & 10)
+        # (h[4][1] & 08)
+        # (h[4][1] & 04)
+        # (h[4][1] & 02)
+        # (h[4][1] & 01)
+        h = h[0:4] \
+            + (bytes([(h[4][0] & 0xF0) >> 4]),) \
+            + (bytes([h[4][0] & 0x0F, h[4][1] & 0xFF]),) \
+            + h[5:]
+        return TcpHdr._make(h)
 
     @classmethod
     def from_bytes(cls, tcp_data):
-        l = (struct.unpack_from('!B', tcp_data, 12)[0] >> 4) * 4
-        h = struct.unpack_from(TCP_HDR_STRUCT_FMT, tcp_data, 0)
-        h = h[0:4] + (((h[4] & 0xF0) >> 4) * 4,) + (h[5],) + h[6:] # expand tuple from unpacked struct into tuple used to make HTCP object
-        segment_header = TcpHdr._make(h)
-        segment_opt = h[struct.calcsize(TCP_HDR_STRUCT_FMT):l]
-        segment_payload = tcp_data[l:]
-        
-        return cls(segment_header, segment_opt, segment_payload)
+        hl = (struct.unpack_from('!B', tcp_data, 12)[0] >> 4) * 4
+       
+        segment_header = bytes(tcp_data[0:20])
+        segment_opt = bytes(tcp_data[20:hl])
+        segment_payload = bytes(tcp_data[hl:])
 
-# dict of the codes:description of the protocol recognized by the analyzer
+        return cls(segment_header, segment_opt, segment_payload)
+        
+
+# dict of know transport protocols
 IP4_PROTO = {
-    0x06: 'Transmission Control Protocol'
+    0x06: TCPSegment033
 }
 
-IP4_HDR_STRUCT_FMT = '!BBHHHBBHII'
+IP4_HDR_STRUCT_FMT = '!cc2s2s2scc2s4s4s'
 
-Ip4Hdr = namedtuple('HIP4', ['version', 'ihl', 'tos', 'tlength', 'id', 'flags', 'frag_offset', 'ttl', 'proto', 'checksum', 'src', 'dst'])
-
-# dict of the optcode:length of the options recognized by the analyzer
+# dict of know option length
 # length = -1 is variable
 IP4_OPT_LEN = {
     0: 1,
@@ -278,33 +311,46 @@ IP4_OPT_LEN = {
     18: 12
 }
 
+Ipv4Header033 = namedtuple('Ipv4Header033', ['version', 'ihl', 'tos', 'tlength', 'id', 'flags', 'frag_offset', 'ttl', 'proto', 'checksum', 'src', 'dst'])
+
 # TODO: fix flags offsets
 @dataclass
 class IPv4Packet033:
-    header: NamedTuple
-    opt: bytes
-    payload: Union[bytes, TCPSegment]
+    header_data: bytes
+    opt_data: bytes
+    payload: Union[bytes, TCPSegment033]
 
     PROTO = "ipv4"
 
     @property
     def size(self):
-        return self.header.ihl*4 + self.payload.size if not isinstance(self.payload, bytearray) else len(self.payload)
+        return len(self.header_data) + self.payload.size if not isinstance(self.payload, bytes) else len(self.payload)
+
+    @property
+    def header(self):
+        ''''''
+        h = struct.unpack(IP4_HDR_STRUCT_FMT, self.header_data)
+        h = (bytes([h[0][0] >> 4]), bytes([h[0][0] & 0x0F])) \
+            + h[1:4] \
+            + (bytes([h[4][0] & 0xE0]), bytes([h[4][0] & 0x1F])) \
+            + h[5:]
+        return Ipv4Header033._make(h)
 
     @classmethod
     def from_bytes(cls, packet_data):
         ''''''
-        p = struct.unpack_from('!B', packet_data, 9)[0]
-        if p in IP4_PROTO:
-            h = struct.unpack_from(IP4_HDR_STRUCT_FMT, packet_data, 0)
-            h = (h[0] >> 4, h[0] & 0x0F) + h[1:4] + (h[4] & 0xE0, h[4] & 0x1F) + h[5:] # extracts data from the fields taht are less than 1 byte long, /!\ missing first flag because not in same byte
-            packet_header = Ip4Hdr._make(h)
 
-            packet_opt = packet_data[struct.calcsize(IP4_HDR_STRUCT_FMT):packet_header.ihl]
-            packet_payload = TCPSegment.from_bytes(packet_data[packet_header.ihl*4:])
+        hl = (struct.unpack_from('!B', packet_data, 0)[0] & 0x0F) * 4
+        proto = struct.unpack_from('!B', packet_data, 9)[0]
+
+        packet_header = bytes(packet_data[0:20])
+        packet_opt = bytes(packet_data[20:hl])
+
+        if proto in IP4_PROTO:
+            packet_payload = IP4_PROTO[proto].from_bytes(packet_data[hl:])
         else:
-            return packet_data
-
+            packet_payload = bytes(packet_data[hl:])
+        
         return cls(packet_header, packet_opt, packet_payload)
 
 ETH_TYPE = {
@@ -312,37 +358,48 @@ ETH_TYPE = {
 }
 
 ETH_HDR_STRUCT_FMT = {
-    0x0800: '!6s6sH',
+    0x0800: '!6s6s2s', # '!6s6sH'
 }
 
 EthHdr = {
-    0x0800: namedtuple('H0800', ['dst', 'src', 'type'])
+    0x0800: namedtuple('EthernetHeader', ['dst', 'src', 'type'])
 }
 
 @dataclass
 class EthFrame033:
-    header: NamedTuple
+    header_data: bytes
     payload: Union[bytes, IPv4Packet033]
 
     PROTO = "ethernet"
 
     @property
     def size(self):
-        return struct.calcsize(ETH_HDR_STRUCT_FMT[0x0800]) + self.payload.size if not isinstance(self.payload, bytearray) else len(self.payload)
+        return struct.calcsize(ETH_HDR_STRUCT_FMT[0x0800]) + self.payload.size if not isinstance(self.payload, bytes) else len(self.payload)
+
+    @property
+    def header(self):
+        '''Builds a EthFrame033 object from a string of bytes'''
+
+        e = struct.unpack_from('!H', self.header_data, 12)[0] # attempts to read the ethernet type of the packet from the data
+        if e in ETH_TYPE: # if header format is known initialize the header
+            return EthHdr[e]._make(struct.unpack(ETH_HDR_STRUCT_FMT[e], self.header_data))
+        else:
+            return self.header_data # if the header format is not understood, returns the frame data instead
 
     @classmethod
     def from_bytes(cls, frame_data):
         '''Builds a EthFrame033 object from a string of bytes'''
 
-        e = struct.unpack_from('!H', frame_data, 12)[0] # attempts to read the ethernet type of the packet from the data
-        if e in ETH_TYPE: # if header format is known initialize the header
-            frame_header = EthHdr[e]._make(struct.unpack_from(ETH_HDR_STRUCT_FMT[e], frame_data, 0))
-            frame_payload = IPv4Packet033.from_bytes(frame_data[struct.calcsize(ETH_HDR_STRUCT_FMT[e]):])
+        etype = struct.unpack_from('!H', frame_data, 12)[0] # attempts to read the ethernet type of the packet from the data
+        if etype in ETH_TYPE: # if header format is known initialize the header
+            h_size = struct.calcsize(ETH_HDR_STRUCT_FMT[etype])
+            fh = bytes(frame_data[0:h_size])
+            fp = IPv4Packet033.from_bytes(frame_data[h_size:])
+            return cls(fh, fp)
         else:
-            return frame_data # if the header format is not understood, returns the frame data instead
+            return bytes(frame_data) # if the header format is not understood, returns the frame data instead
         
-        return cls(frame_header, frame_payload)
-
+    
 @dataclass
 class Trace033:
     frames: List[Union[bytes, EthFrame033]]
@@ -419,9 +476,32 @@ def hexdump(bytes):
 UP = -1
 DOWN = 1
 
-known_protocols = {"ethernet", "ipv4", "tcp", "http", "unknown"}
-
-etht = {"dst", "src", "type"}
+pretty_names = {
+    EthFrame033: {"src": "src: 0x{1:x} - {0[0]:x}:{0[1]:x}:{0[2]:x}:{0[3]:x}:{0[4]:x}:{0[5]:x}"
+                    , "dst": "dst: 0x{1:x} - {0[0]:x}:{0[1]:x}:{0[2]:x}:{0[3]:x}:{0[4]:x}:{0[5]:x}"
+                    , "type": "eth type: 0x{1:x} - {1:d}"}
+    , IPv4Packet033: {"version": "version: 0x{1:x} - {1:d}"
+                        , "ihl": "header length: 0x{1:x} - {1:d}"
+                        , "tos": "tos: 0x{1:x}"
+                        , "tlength": "total length: 0x{1:x} - {1:d}"
+                        , "id": "id: 0x{1:x} - {1:d}"
+                        , "flags": "flags: 0x{1:x}"
+                        , "frag_offset": "fragment offset: 0x{1:x} - {1:d}"
+                        , "ttl" : "ttl: 0x{1:x} - {1:d}"
+                        , "proto": "protocol: 0x{1:x} - {1:d}"
+                        , "checksum": "checksum: 0x{1:x} - {1:d}"
+                        , "src": "source adress: 0x{1:x} - {0[0]:d}.{0[1]:d}.{0[2]:d}.{0[3]:d}"
+                        , "dst": "destination adress: 0x{1:x} - {0[0]:d}.{0[1]:d}.{0[2]:d}.{0[3]:d}"}
+    , TCPSegment033: {"src_port": "source port: 0x{1:x} - {1:d}"
+                        , "dst_port": "destination port: 0x{1:x} - {1:d}"
+                        , "seq": "sequence number: 0x{1:x} - {1:d}"
+                        , "ack": "acknowledgement number: 0x{1:x} - {1:d}"
+                        , "hl": "header length: 0x{1:x} - {1:d}"
+                        , "flags": "flags: 0x{1:x} - {1:d}"
+                        , "win": "window: 0x{1:x} - {1:d}"
+                        , "chksum": "checksum: 0x{1:x} - {1:d}"
+                        , "urg": "urgent pointer: 0x{1:x} - {1:d}"}
+}
 
 def run_cursed_ui(stdscr, tracetree):
     stdscrh, stdscrw = stdscr.getmaxyx()
@@ -513,28 +593,33 @@ def run_cursed_ui(stdscr, tracetree):
         fldpad.erase()
     
         # populate the protocols list in the header pad
-        protocols = []
+        protocol_stack = []
         pl = tracetree.frames[selfrmidx]
-        layer = 0
+        hdridx = 0
         while True:
-            protocols.append(pl)
+            protocol_stack.append(pl)
             proto = pl.PROTO if hasattr(pl, "PROTO") else "unknown"
-            hdrpad.addstr(layer, 0, proto)
-            if hasattr(pl, "payload") and (pl.payload != None and not isinstance(pl.payload, bytearray)):
+            hdrpad.addstr(hdridx, 0, proto)
+            if hasattr(pl, "payload") and (pl.payload != None and not isinstance(pl.payload, bytes)):
                 pl = pl.payload
             else:
                 break
-            layer += 1 
+            hdridx += 1 
         hdrpad_refresh()
 
-        p = protocols[selhdridx]
-        fidx = 0
+        p = protocol_stack[selhdridx]
+        fldidx = 0
         h = p.header
-        t = h._asdict()
-        for field in h._asdict().items():
-            s = f"{field[0]} : {field[1]}"
-            fldpad.addstr(fidx, 0, s)
-            fidx += 1
+        if type(p) in pretty_names:
+            for field_name, field_value in h._asdict().items():
+                s = pretty_names[type(p)][field_name].format(field_value, int(field_value.hex(), 16))
+                fldpad.addstr(fldidx, 0, s)
+                fldidx += 1
+        else:
+            for field in h._asdict().items():
+                s = f"{field[0]} : {field[1].hex()}"
+                fldpad.addstr(fldidx, 0, s)
+                fldidx += 1
         fldpad_refresh()
 
         k = stdscr.getkey()
@@ -551,7 +636,7 @@ def run_cursed_ui(stdscr, tracetree):
             frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_STANDOUT)
         elif k == "\n" or k == "KEY_B3": # enter header menu
 
-            maxhdridx = layer # maybe rename layer
+            maxhdridx = hdridx # maybe rename layer
             hdrpad.chgat(selhdridx, 0, hdrpadw, curses.A_STANDOUT)
             hdrpad_refresh()
             while True:
@@ -570,14 +655,19 @@ def run_cursed_ui(stdscr, tracetree):
                 elif k == "KEY_B1":
                     break
 
-                p = protocols[selhdridx]
-                fidx = 0
+                p = protocol_stack[selhdridx]
+                fldidx = 0
                 h = p.header
-                t = h._asdict()
-                for field in h._asdict().items():
-                    s = f"{field[0]} : {field[1]}"
-                    fldpad.addstr(fidx, 0, s)
-                    fidx += 1
+                if type(p) in pretty_names:
+                    for field_name, field_value in h._asdict().items():
+                        s = pretty_names[type(p)][field_name].format(field_value, int(field_value.hex(), 16))
+                        fldpad.addstr(fldidx, 0, s)
+                        fldidx += 1
+                else:
+                    for field in h._asdict().items():
+                        s = f"{field[0]} : {field[1].hex()}"
+                        fldpad.addstr(fldidx, 0, s)
+                        fldidx += 1
 
                 fldpad_refresh()
                 hdrpad_refresh()
