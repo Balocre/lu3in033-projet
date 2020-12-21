@@ -142,6 +142,9 @@ class TraceFileParser033:
 
         Args:
             tracefile (:obj:`io.FileIO`): File object of the trace
+
+        Returns:
+            A list of tokens representing the trace file structure
         '''
 
         print("Lexer goes brrt")
@@ -186,6 +189,12 @@ class TraceFileParser033:
         Args:
             tokens (:obj:`list` of :obj:`str`): List of tokens returned by the
                 lexer
+        
+        Returns:
+            An abstract Syntax Tree representing the trace file
+
+        Note:
+            The parser use an LL1 grammar and production rules defined above
         '''
         stack = ['$', 'trace'] # rightmost element is on the left
         i = 0
@@ -275,7 +284,9 @@ class TCPSegment033:
     '''Represents a TCP segment
 
     Args:
-
+        header_data (bytes): The header data
+        opt_data (bytes): The options data
+        payload (Union[bytes, TCPSegment033]): The content of the segment
     '''
     header_data: bytes
     opt_data: bytes
@@ -285,12 +296,16 @@ class TCPSegment033:
 
     @property
     def size(self):
+        '''Returns the size in bytes of the segment'''
         return len(self.header_data) \
+                + len(self.opt_data) \
                 + self.payload.size if not isinstance(self.payload, bytes) and self.payload != None \
                                     else len(self.payload) if self.payload != None else 0
 
     @property
     def header(self):
+        '''Returns the header as a NamedTuple'''
+
         h = struct.unpack(TCP_HDR_STRUCT_FMT, self.header_data)
 
         # expand header length and flags
@@ -311,6 +326,14 @@ class TCPSegment033:
 
     @classmethod
     def from_bytes(cls, tcp_data):
+        '''Produce a TCPSegment033 object from a bytestring
+        
+        Args:
+            packet_data (bytes): The raw data representing the packets
+            
+        Returns:
+            An TCPSegment033 object instanciated using the raw data
+        '''
         if len(tcp_data) < 20:
             warnings.warn("Malformed segment: header is incomplete, can't parse segment", BytesWarning)
             return bytes(tcp_data)
@@ -355,11 +378,23 @@ IP4_OPT_LEN = {
     18: 12
 }
 
-Ipv4Header033 = namedtuple('Ipv4Header033', ['version', 'ihl', 'tos', 'tlength', 'id', 'flags', 'frag_offset', 'ttl', 'proto', 'checksum', 'src', 'dst'])
+Ipv4Header033 = namedtuple('Ipv4Header033', ['version', 'ihl', 'tos', 'tlength', 'id', 'flags', 'df', 'mf', 'frag_offset', 'ttl', 'proto', 'checksum', 'src', 'dst'])
 
 # TODO: fix flags offsets
 @dataclass
 class IPv4Packet033:
+    '''A class representing an IPV4 packet
+
+    Args:
+        header_data (bytes): The header data
+        opt_data (bytes): The options data
+        payload (Union[bytes, TCPSegment033]): The content of the packet
+
+    Notes:
+        If the protocol of the payload is known, the payload is expanded as 
+            corresponding class, otherwise it is stored as a bytestring
+    '''
+
     header_data: bytes
     opt_data: bytes
     payload: Union[bytes, TCPSegment033]
@@ -368,23 +403,37 @@ class IPv4Packet033:
 
     @property
     def size(self):
+        '''Returns the size in bytes of the packet'''
+
         return len(self.header_data) \
                 + len(self.opt_data) \
                 + self.payload.size if not isinstance(self.payload, bytes) else len(self.payload)
 
     @property
     def header(self):
-        ''''''
+        '''Returns the header as a NamedTuple'''
+
         h = struct.unpack(IP4_HDR_STRUCT_FMT, self.header_data)
         h = (bytes([h[0][0] >> 4]), bytes([h[0][0] & 0x0F])) \
             + h[1:4] \
-            + (bytes([h[4][0] & 0xE0]), bytes([h[4][0] & 0x1F])) \
+            + (bytes([h[4][0] & 0xE0]),) \
+            + (bytes([(h[4][0] & 0x40) >> 6]),) \
+            + (bytes([(h[4][0] & 0x20) >> 5]),) \
+            + (bytes([h[4][0] & 0x1F]) + bytes([h[4][1] & 0xFF]),) \
             + h[5:]
         return Ipv4Header033._make(h)
 
     @classmethod
     def from_bytes(cls, packet_data):
-        ''''''
+        '''Produce an IPv4Packet033 object from a bytestring
+        
+        Args:
+            packet_data (bytes): The raw data representing the packets
+            
+        Returns:
+            An IPv4Packet033 object instanciated using the raw data
+        '''
+
         tl = struct.unpack_from('!H', packet_data, 2)[0]
         if len(packet_data) < 20:
             warnings.warn("Malformed packet: header is incomplete, can't parse packet", BytesWarning)
@@ -399,7 +448,7 @@ class IPv4Packet033:
         packet_header = bytes(packet_data[0:20])
         packet_opt = bytes(packet_data[20:hl])
 
-        if proto in IP4_PROTO:
+        if proto in IP4_PROTO: # check if protocol of payload is known
             packet_payload = IP4_PROTO[proto].from_bytes(packet_data[hl:])
         else:
             packet_payload = bytes(packet_data[hl:])
@@ -431,7 +480,7 @@ class EthFrame033:
 
     @property
     def header(self):
-        '''Builds a EthFrame033 object from a string of bytes'''
+        '''Returns the header as a NamedTuple'''
 
         e = struct.unpack_from('!H', self.header_data, 12)[0] # attempts to read the ethernet type of the packet from the data
         if e in ETH_TYPE: # if header format is known initialize the header
@@ -442,7 +491,14 @@ class EthFrame033:
 
     @classmethod
     def from_bytes(cls, frame_data):
-        '''Builds a EthFrame033 object from a string of bytes'''
+        '''Produce an EthFrame033 object from a bytestring
+        
+        Args:
+            packet_data (bytes): The raw data representing the packets
+            
+        Returns:
+            A EthFrame033 object instanciated using the raw data
+        '''
 
         etype = struct.unpack_from('!H', frame_data, 12)[0] # attempts to read the ethernet type of the packet from the data
         if etype in ETH_TYPE: # if header format is known initialize the header
@@ -456,17 +512,36 @@ class EthFrame033:
     
 @dataclass
 class Trace033:
+    '''Represents the trace object
+
+    Note:
+        This class is not really useful at the moment, it is there to 
+            futureproof the project
+    '''
     frames: List[Union[bytes, EthFrame033]]
 
 
 def extend_pack_into(format, buffer, offset, *v):
-    '''Write bytes values into bytearray at given offset, extends the bytearray to fit the values if necessary'''
+    '''Write byte data into a bytearray at given offset, extends the bytearray 
+        to fit the values if necessary
+        
+    Args:
+        format (str): The format string defined as a struct fromat string
+        buffer (io.ByteBufferIO): The buffer into which the data is written
+        offset (int): The offset at which to write the data
+        v: (iterable): 
+        
+    Returns:
+        The buffer into which the data was written
+    '''
+
     if len(buffer) < offset + struct.calcsize(format):
         buffer = buffer.ljust(offset + struct.calcsize(format), b'\xff') # padding character is 0xff
     struct.pack_into(format, buffer, offset, *v)
     return buffer
 
 class TraceAnalyser033:
+    '''Groups all the function used to analyze a trace object'''
     # TODO: add verification of contiguous data and return error if gap
     def extract_framenode_data(self, framenode):
         '''Extracts data of a FrameNode033 object
@@ -512,10 +587,12 @@ class TraceAnalyser033:
                 finally:
                     tracenode = tracenode.trace
                     i += 1
-
-                    
-
+        
         return trace_data
+
+    def save_to_json(self, tracetree):
+        pass
+
 
     def derive_tree(self, ast):
         '''Derive a tree representing the trace from the AST produced by the parse method'''
@@ -554,6 +631,9 @@ def hexdump(bytes):
 UP = -1
 DOWN = 1
 
+# this dict is used to print human readable informations
+# to each class representing a known protocol is associated a dict mapping
+# its attributes to a format string used to display the informations
 pretty_names = {
     EthFrame033: {"src": "src: 0x{1:x} - {0[0]:x}:{0[1]:x}:{0[2]:x}:{0[3]:x}:{0[4]:x}:{0[5]:x}"
                     , "dst": "dst: 0x{1:x} - {0[0]:x}:{0[1]:x}:{0[2]:x}:{0[3]:x}:{0[4]:x}:{0[5]:x}"
@@ -564,6 +644,8 @@ pretty_names = {
                         , "tlength": "total length: 0x{1:x} - {1:d}"
                         , "id": "id: 0x{1:x} - {1:d}"
                         , "flags": "flags: 0x{1:x}"
+                        , "df": "{1:d}. - Dont Fragment"
+                        , "mf": ".{1:d} - More Fragments"
                         , "frag_offset": "fragment offset: 0x{1:x} - {1:d}"
                         , "ttl" : "ttl: 0x{1:x} - {1:d}"
                         , "proto": "protocol: 0x{1:x} - {1:d}"
@@ -594,6 +676,7 @@ def run_cursed_ui(stdscr, tracetree):
     stdscrh, stdscrw = stdscr.getmaxyx()
 
     # frame menu
+    frmtxt = "[Frames]"
     frmwinh = stdscrh-2
     frmwinw = 50
     frmwinx = 0
@@ -601,16 +684,18 @@ def run_cursed_ui(stdscr, tracetree):
     
     frmwin = stdscr.subwin(frmwinh, frmwinw, frmwiny, frmwinx)
     frmwin.border()
+    frmwin.addstr(0, 3, frmtxt)
 
     frmpadh = len(tracetree.frames)
     frmpadw = frmwinw-2
-    frmpadtl = (frmwiny+1, frmwinx+1) # position of top left corner of pad on screen
+    frmpadtl = (frmwiny+2, frmwinx+1) # position of top left corner of pad on screen
     frmpadbr = (frmwinh-2, frmwinw-2) # position of bottom right corner
 
     frmpad = curses.newpad(frmpadh, frmpadw)
     frmpad_refresh = lambda: frmpad.refresh(topfrmidx, 0, *frmpadtl, *frmpadbr)
 
     # header menu
+    hdrtxt = "[Headers]"
     hdrwinh = stdscrh-2
     hdrwinw = 20
     hdrwinx = frmwinx+frmwinw
@@ -618,16 +703,18 @@ def run_cursed_ui(stdscr, tracetree):
 
     hdrwin = stdscr.subwin(hdrwinh, hdrwinw, hdrwiny, hdrwinx)
     hdrwin.border()
+    hdrwin.addstr(0, 3, hdrtxt)
 
     hdrpadh = hdrwinh-2
     hdrpadw = hdrwinw-2
-    hdrpadtl = (hdrwiny+1, hdrwinx+1)
+    hdrpadtl = (hdrwiny+2, hdrwinx+1)
     hdrpadbr = (hdrwinh-2, hdrwinx+hdrwinw-2)
 
     hdrpad = curses.newpad(hdrpadh, hdrpadw)
     hdrpad_refresh = lambda: hdrpad.refresh(0, 0, *hdrpadtl, *hdrpadbr)
 
     # field infos
+    fldtxt = "[Field Infos]"
     fldwinh = stdscrh-2
     fldwinw = stdscrw-(hdrwinx+hdrwinw)
     fldwinx = hdrwinw+hdrwinx
@@ -635,7 +722,7 @@ def run_cursed_ui(stdscr, tracetree):
 
     fldpadh = fldwinh-2
     fldpadw = fldwinw-2
-    fldpadtl = (fldwiny+1, fldwinx+1)
+    fldpadtl = (fldwiny+2, fldwinx+1)
     fldpadbr = (fldwinh-2, fldwinx+fldwinw-2)
 
     fldpad = curses.newpad(fldpadh, fldpadw)
@@ -643,6 +730,7 @@ def run_cursed_ui(stdscr, tracetree):
 
     fldwin = stdscr.subwin(fldwinh, fldwinw, fldwiny, fldwinx)
     fldwin.border()
+    fldwin.addstr(0, 3, fldtxt)
 
     topfrmidx = 0
     selfrmidx = 0
@@ -653,16 +741,21 @@ def run_cursed_ui(stdscr, tracetree):
     frames = tracetree.frames
     i = 0
     for f in frames:
-        p = f
-        protos = ""
-        while True:
-            protos += p.PROTO if hasattr(p, "PROTO") else "unknown"
-            if hasattr(p, "payload") and p.payload != None:
-                protos += ":"
-                p = p.payload
-            else:
-                break
-        s = f"0x{i:04x} " + protos + f" {f.size}"
+        if isinstance(f, bytes):
+            protos = "unknown"
+            size = len(f)
+        else:
+            p = f
+            protos = ""
+            while True:
+                protos += p.PROTO if hasattr(p, "PROTO") else "unknown"
+                if hasattr(p, "payload") and p.payload != None:
+                    protos += ":"
+                    p = p.payload
+                else:
+                    break
+            size = f.size
+        s = f"0x{i:04x} " + protos + f" {size}"
         frmpad.addstr(i, 0, s)
         i += 1
     frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_STANDOUT)
