@@ -1,3 +1,5 @@
+import sys
+import argparse
 from dataclasses import astuple, dataclass, InitVar, field
 import io
 from collections import namedtuple
@@ -238,11 +240,44 @@ def extend_pack_into(format, buffer, offset, *v):
     struct.pack_into(format, buffer, offset, *v)
     return buffer
 
+@dataclass
+class HttpMessage:
+    header_data: bytes
+    message_data: bytes
+
+    PROTO="http"
+    
+    @property
+    def size(self):
+        return len(self.header_data) \
+                + len(self.message_data) if self.message_data != None else 0
+
+    @property
+    def header(self):
+        return self.header_data.decode("utf-8")
+
+    @classmethod
+    def from_bytes(cls, http_data):
+
+        split = http_data.split(b'\r\n\r\n', 1)
+        if len(split) == 2:
+            http_header, http_message = split
+        else:
+            http_header = split[0]
+            http_message = None
+
+        return cls(http_header, http_message)
+
+    
+TCP_KNOWN_PORTS = {
+    80: HttpMessage
+}
+
 TCP_HDR_STRUCT_FMT = '!2s2s4s4s2s2s2s2s'
 # '!2s2s4s4s2s2s2s2s'
 
 TcpHdr = namedtuple('HTCP', ['src_port', 'dst_port', 'seq', 'ack', 'hl', 'flags', 'win', 'chksum', 'urg'])
-# ['src_port', 'dst_port', 'seq', 'ack', 'hl', 'ecn', 'cwr', 'ece', 'urg', 'ack', 'psh', 'rst', 'syn', 'fin', 'win', 'chksum', 'urg']
+# ['src_port', 'dst_port', 'seq', 'ack', 'hl', 'flags', 'ecn', 'cwr', 'ece', 'urg', 'ack', 'psh', 'rst', 'syn', 'fin', 'win', 'chksum', 'urg']
 
 @dataclass
 class TCPSegment033:
@@ -253,27 +288,29 @@ class TCPSegment033:
     '''
     header_data: bytes
     opt_data: bytes
-    payload: bytes
+    payload: Union[bytes, HttpMessage]
 
     PROTO = "tcp"
 
     @property
     def size(self):
-        return len(self.header_data) + len(self.payload)
+        return len(self.header_data) \
+                + self.payload.size if not isinstance(self.payload, bytes) and self.payload != None \
+                                    else len(self.payload) if self.payload != None else 0
 
     @property
     def header(self):
         h = struct.unpack(TCP_HDR_STRUCT_FMT, self.header_data)
-        # (h[4][0] & F0) >> 4
-        # (h[4][0] & 01)
-        # (h[4][1] & 80)
-        # (h[4][1] & 40)
-        # (h[4][1] & 20)
-        # (h[4][1] & 10)
-        # (h[4][1] & 08)
-        # (h[4][1] & 04)
-        # (h[4][1] & 02)
-        # (h[4][1] & 01)
+
+        # + bytes([(h[4][0] & 01)],) \
+        # + bytes([(h[4][1] & 80)],) \
+        # + bytes([(h[4][1] & 40)],) \
+        # + bytes([(h[4][1] & 20)],) \
+        # + bytes([(h[4][1] & 10)],) \
+        # + bytes([(h[4][1] & 08)],) \
+        # + bytes([(h[4][1] & 04)],) \
+        # + bytes([(h[4][1] & 02)],) \
+        # + bytes([(h[4][1] & 01)],) \
         h = h[0:4] \
             + (bytes([(h[4][0] & 0xF0) >> 4]),) \
             + (bytes([h[4][0] & 0x0F, h[4][1] & 0xFF]),) \
@@ -283,10 +320,21 @@ class TCPSegment033:
     @classmethod
     def from_bytes(cls, tcp_data):
         hl = (struct.unpack_from('!B', tcp_data, 12)[0] >> 4) * 4
+        src = struct.unpack_from('!H', tcp_data, 0)[0]
+        dst = struct.unpack_from('!H', tcp_data, 2)[0]
        
         segment_header = bytes(tcp_data[0:20])
         segment_opt = bytes(tcp_data[20:hl])
-        segment_payload = bytes(tcp_data[hl:])
+
+        if not tcp_data[hl:]:
+            return cls(segment_header, segment_opt, None)
+
+        if src in TCP_KNOWN_PORTS:
+            segment_payload = TCP_KNOWN_PORTS[src].from_bytes(tcp_data[hl:])
+        elif dst in TCP_KNOWN_PORTS:
+            segment_payload = TCP_KNOWN_PORTS[dst].from_bytes(tcp_data[hl:])
+        else:
+            segment_payload = bytes(tcp_data[hl:])
 
         return cls(segment_header, segment_opt, segment_payload)
         
@@ -324,7 +372,10 @@ class IPv4Packet033:
 
     @property
     def size(self):
-        return len(self.header_data) + self.payload.size if not isinstance(self.payload, bytes) else len(self.payload)
+        return len(self.header_data) \
+                + len(self.opt_data) \
+                + self.payload.size if not isinstance(self.payload, bytes) else len(self.payload)
+
 
     @property
     def header(self):
@@ -447,7 +498,7 @@ class TraceAnalyser033:
             try:
                 frames.append(EthFrame033.from_bytes(frame_data))
             except ValueError as e:
-                pass
+                 pass
                 
         return Trace033(frames)
 
@@ -592,34 +643,26 @@ def run_cursed_ui(stdscr, tracetree):
         hdrpad.erase()
         fldpad.erase()
     
-        # populate the protocols list in the header pad
+        # build the protocol stack for selected frame
         protocol_stack = []
         pl = tracetree.frames[selfrmidx]
-        hdridx = 0
+        i = 0
         while True:
             protocol_stack.append(pl)
-            proto = pl.PROTO if hasattr(pl, "PROTO") else "unknown"
-            hdrpad.addstr(hdridx, 0, proto)
             if hasattr(pl, "payload") and (pl.payload != None and not isinstance(pl.payload, bytes)):
                 pl = pl.payload
             else:
                 break
-            hdridx += 1 
-        hdrpad_refresh()
+            i += 1 
 
-        p = protocol_stack[selhdridx]
-        fldidx = 0
-        h = p.header
-        if type(p) in pretty_names:
-            for field_name, field_value in h._asdict().items():
-                s = pretty_names[type(p)][field_name].format(field_value, int(field_value.hex(), 16))
-                fldpad.addstr(fldidx, 0, s)
-                fldidx += 1
-        else:
-            for field in h._asdict().items():
-                s = f"{field[0]} : {field[1].hex()}"
-                fldpad.addstr(fldidx, 0, s)
-                fldidx += 1
+        # populate the header pad
+        i = 0
+        for proto in protocol_stack:
+            proto_name = proto.PROTO if hasattr(proto, "PROTO") else "unknown"
+            hdrpad.addstr(i, 0, proto_name)
+            i += 1
+       
+        hdrpad_refresh()
         fldpad_refresh()
 
         k = stdscr.getkey()
@@ -629,18 +672,52 @@ def run_cursed_ui(stdscr, tracetree):
             selfrmidx = max(0, selfrmidx-1)
             topfrmidx = min(selfrmidx, topfrmidx)
             frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_STANDOUT)
+
         elif k == "KEY_C2":
             frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_NORMAL)
             selfrmidx = min(frmpadh-1, selfrmidx+1)
             topfrmidx = max(max(selfrmidx-frmwinh+3,0), topfrmidx)
             frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_STANDOUT)
-        elif k == "\n" or k == "KEY_B3": # enter header menu
 
-            maxhdridx = hdridx # maybe rename layer
+        elif k == "\n" or k == "KEY_B3": # enter header menu
+            maxhdridx = len(protocol_stack)-1 # maybe rename layer
             hdrpad.chgat(selhdridx, 0, hdrpadw, curses.A_STANDOUT)
             hdrpad_refresh()
+
             while True:
                 fldpad.erase()
+                fldpad_refresh()
+
+                # populate the field pad
+                p = protocol_stack[selhdridx]
+                fldidx = 0
+                h = p.header
+                if pretty_names.get(type(p)).get(field_name):
+                    pass
+                if type(p) in pretty_names:
+                    fldpad.resize(len(h._asdict()), fldpadw)
+                    for field_name, field_value in h._asdict().items():
+                        s = pretty_names[type(p)][field_name].format(field_value, int(field_value.hex(), 16))
+                        fldpad.addstr(fldidx, 0, s)
+                        fldidx += 1
+                elif type(p) == HttpMessage:
+                    buf = io.StringIO(p.header)
+                    n = 0
+                    while l := buf.readline(fldpadw):
+                        n+=1
+                    buf.seek(0)
+                    fldpad.resize(n, fldpadw)
+                    i = 0
+                    while l := buf.readline(fldpadw):
+                        fldpad.addstr(i, 0, l)
+                        i+=1
+                else:
+                    for field in h._asdict().items():
+                        s = f"{field[0]} : {field[1].hex()}"
+                        fldpad.addstr(fldidx, 0, s)
+                        fldidx += 1
+
+                fldpad_refresh()
 
                 k = stdscr.getkey()
 
@@ -654,26 +731,13 @@ def run_cursed_ui(stdscr, tracetree):
                     hdrpad.chgat(selhdridx, 0, hdrpadw, curses.A_STANDOUT)
                 elif k == "KEY_B1":
                     break
+                elif k == "q":
+                    exit(0)
 
-                p = protocol_stack[selhdridx]
-                fldidx = 0
-                h = p.header
-                if type(p) in pretty_names:
-                    for field_name, field_value in h._asdict().items():
-                        s = pretty_names[type(p)][field_name].format(field_value, int(field_value.hex(), 16))
-                        fldpad.addstr(fldidx, 0, s)
-                        fldidx += 1
-                else:
-                    for field in h._asdict().items():
-                        s = f"{field[0]} : {field[1].hex()}"
-                        fldpad.addstr(fldidx, 0, s)
-                        fldidx += 1
-
-                fldpad_refresh()
                 hdrpad_refresh()
             continue
         elif k == "q":
-            break
+            exit(0)
         else: # debug
             print(k)
 
@@ -683,8 +747,8 @@ def run_cursed_ui(stdscr, tracetree):
         frmpad_refresh()
         
         
-def main():
-    ftrace = io.open('textcap.txt', 'r')
+def main(path):
+    ftrace = io.open(path, 'r')
 
     parser = TraceFileParser033()
     analyser = TraceAnalyser033()
@@ -697,5 +761,16 @@ def main():
     print(len(tracetree.frames)+1)
 
 if __name__ == "__main__":
-    main()
+    ap = argparse.ArgumentParser(description="Analyze captured traffic")
+
+    ap.add_argument('Trace'
+                        , metavar='path'
+                        , type=str
+                        , help='path to the trace file')
+
+    args = ap.parse_args()
+
+    path = args.Trace
+
+    main(path)
 
