@@ -276,7 +276,7 @@ TCP_KNOWN_PORTS = {
 TCP_HDR_STRUCT_FMT = '!2s2s4s4s2s2s2s2s'
 # '!2s2s4s4s2s2s2s2s'
 
-TcpHdr = namedtuple('HTCP', ['src_port', 'dst_port', 'seq', 'ack', 'hl', 'flags', 'win', 'chksum', 'urg'])
+TcpHdr = namedtuple('HTCP', ['src_port', 'dst_port', 'seq', 'acknum', 'hl', 'flags', 'ecn', 'cwr', 'ece', 'urg', 'ack', 'psh', 'rst', 'syn', 'fin', 'win', 'chksum', 'urgp'])
 # ['src_port', 'dst_port', 'seq', 'ack', 'hl', 'flags', 'ecn', 'cwr', 'ece', 'urg', 'ack', 'psh', 'rst', 'syn', 'fin', 'win', 'chksum', 'urg']
 
 @dataclass
@@ -314,6 +314,15 @@ class TCPSegment033:
         h = h[0:4] \
             + (bytes([(h[4][0] & 0xF0) >> 4]),) \
             + (bytes([h[4][0] & 0x0F, h[4][1] & 0xFF]),) \
+            + (bytes([h[4][0] & 0x01]),) \
+            + (bytes([h[4][1] & 0x80]),) \
+            + (bytes([h[4][1] & 0x40]),) \
+            + (bytes([h[4][1] & 0x20]),) \
+            + (bytes([h[4][1] & 0x10]),) \
+            + (bytes([h[4][1] & 0x08]),) \
+            + (bytes([h[4][1] & 0x04]),) \
+            + (bytes([h[4][1] & 0x02]),) \
+            + (bytes([h[4][1] & 0x01]),) \
             + h[5:]
         return TcpHdr._make(h)
 
@@ -546,12 +555,12 @@ pretty_names = {
     , TCPSegment033: {"src_port": "source port: 0x{1:x} - {1:d}"
                         , "dst_port": "destination port: 0x{1:x} - {1:d}"
                         , "seq": "sequence number: 0x{1:x} - {1:d}"
-                        , "ack": "acknowledgement number: 0x{1:x} - {1:d}"
+                        , "acknum": "acknowledgement number: 0x{1:x} - {1:d}"
                         , "hl": "header length: 0x{1:x} - {1:d}"
                         , "flags": "flags: 0x{1:x} - {1:d}"
                         , "win": "window: 0x{1:x} - {1:d}"
                         , "chksum": "checksum: 0x{1:x} - {1:d}"
-                        , "urg": "urgent pointer: 0x{1:x} - {1:d}"}
+                        , "urgp": "urgent pointer: 0x{1:x} - {1:d}"}
 }
 
 def run_cursed_ui(stdscr, tracetree):
@@ -692,15 +701,8 @@ def run_cursed_ui(stdscr, tracetree):
                 p = protocol_stack[selhdridx]
                 fldidx = 0
                 h = p.header
-                if pretty_names.get(type(p)).get(field_name):
-                    pass
-                if type(p) in pretty_names:
-                    fldpad.resize(len(h._asdict()), fldpadw)
-                    for field_name, field_value in h._asdict().items():
-                        s = pretty_names[type(p)][field_name].format(field_value, int(field_value.hex(), 16))
-                        fldpad.addstr(fldidx, 0, s)
-                        fldidx += 1
-                elif type(p) == HttpMessage:
+                
+                if type(p) == HttpMessage:
                     buf = io.StringIO(p.header)
                     n = 0
                     while l := buf.readline(fldpadw):
@@ -712,10 +714,36 @@ def run_cursed_ui(stdscr, tracetree):
                         fldpad.addstr(i, 0, l)
                         i+=1
                 else:
-                    for field in h._asdict().items():
-                        s = f"{field[0]} : {field[1].hex()}"
+                    fldpad.resize(len(h._asdict()), fldpadw)
+                    for field_name, field_value in h._asdict().items():
+                        s = pretty_names.get(type(p)) \
+                                    .get(field_name, f"{field_name} : {field_value.hex()}") \
+                                    .format(field_value, int(field_value.hex(), 16))
                         fldpad.addstr(fldidx, 0, s)
                         fldidx += 1
+
+                # if type(p) in pretty_names:
+                #     fldpad.resize(len(h._asdict()), fldpadw)
+                #     for field_name, field_value in h._asdict().items():
+                #         s = pretty_names[type(p)][field_name].format(field_value, int(field_value.hex(), 16))
+                #         fldpad.addstr(fldidx, 0, s)
+                #         fldidx += 1
+                # elif type(p) == HttpMessage:
+                #     buf = io.StringIO(p.header)
+                #     n = 0
+                #     while l := buf.readline(fldpadw):
+                #         n+=1
+                #     buf.seek(0)
+                #     fldpad.resize(n, fldpadw)
+                #     i = 0
+                #     while l := buf.readline(fldpadw):
+                #         fldpad.addstr(i, 0, l)
+                #         i+=1
+                # else:
+                #     for field in h._asdict().items():
+                #         s = f"{field[0]} : {field[1].hex()}"
+                #         fldpad.addstr(fldidx, 0, s)
+                #         fldidx += 1
 
                 fldpad_refresh()
 
