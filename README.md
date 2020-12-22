@@ -4,7 +4,7 @@ implémentation d'un "Analyseur de protocole réseaux"*
 
 
 
-### Structure
+## **Structure**
 
 Le projet est composé d'un seul fichier : projet.py
 
@@ -13,14 +13,14 @@ Ce fichier est découpé en 3 parties majeures:
     - Analyser
     - UI
 
-#### Parser :
+#### **Parser** :
 
 Dans cette partie vous trouverez les classes et les fonctions permettant le
 parsing d'un fichier trace.
     - Les classes composant l'AST
     - La classe TraceFileParser033, qui contient les fonctions lexer et parser
 
-#### Analyser :
+#### **Analyser** :
 Dans cette partie se trouvent les classes associées a l'analyse des trames
     - Les classes composant un Trace033
     - La classse TraceAnalyzer033, qui regroupe les fonctions permettant 
@@ -28,7 +28,7 @@ Dans cette partie se trouvent les classes associées a l'analyse des trames
         trace
     - Quelques fonctions permettant la manipulation des données produites
 
-#### UI :
+#### **UI** :
 Cette partie n'est composée que de la fonction run_cursed_ui qui permet
 de produire l'interface utilisateur
 
@@ -37,3 +37,52 @@ car c'est c'est une bonne pratique en python et celà permet de maintenir le cod
 plus facilement, ainsi beaucoup de variables et objets servant à la 
 configuration du programme sont déclarée dans la scope globale. Elles sont 
 généralement placées au dessus des fonctions qu'elles concernent.
+
+#### **Filtres**
+
+Voici les valeurs des champs qu'il est possible de filtrer pour chaque protocole
+un filtre s'écrit de la manière suivante : 
+```protocole1.champ1 == valeur1, protocole2.champ2 == valeur2, ...```
+la valeur doit être écrite en base décimale
+
+A noter que le filtrage séléctionne les trames positivement en fonction des 
+filtres (ou) si vous voulez filtrez en fonction plusieurs champs (et) il faudra
+faire un second filtrage sur la sortie
+
+| protocole | champ |
+|-----------|-------|
+|ethernet   |dst    |
+|           |src    | 
+|           |type   |
+|ipv4       |version|
+|           |ihl    |
+|           |tos    |
+|           |tlength|
+|           |id     |
+|           |flags  |
+|           |df     |
+|           |mf     |
+|           |frag_offset|
+|           |ttl    |
+|           |proto  |
+|           |checksum|
+|           |src    |
+|           |dst    |
+|tcp        |src_port|
+|           |dst_port|
+|           |seq    |
+|           |acknum |
+|           |hl     |
+|           |flags  |
+|           |ecn    |
+|           |cwr    |
+|           |ece    |
+|           |urg    |
+|           |ack    |
+|           |psh    |
+|           |rst    |
+|           |syn    |
+|           |fin    |
+|           |win    |
+|           |chksum |
+|           |urgp   |

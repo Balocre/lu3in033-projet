@@ -1,3 +1,4 @@
+import os
 import sys
 import pickle
 import argparse
@@ -135,6 +136,7 @@ nt_classes = {'frame':FrameASTNode033, 'trace':TraceASTNode033, 'frame_fragment'
 nt_delimiters = {'end_of_frame_fragment':'frame', 'end_of_frame':'trace', '$':'ast'}
 
 # regex used to tokenize the lines
+# elle est pas mangifique cette regex?!
 e = r"^(?P<frame_fragment_offset>[0-9A-Fa-f]{2,})\s*(?P<frame_fragment_data>((?<=\s)([0-9A-Fa-f]{2}\s)*[0-9A-Fa-f]{2})|[0-9A-Fa-f]{2})?\s*(?P<garbage>(?<=\s)[^\n]+)?(?P<end_of_frame_fragment>\n|(?<!\n)$)"
 
 class TraceFileParser033:
@@ -635,14 +637,35 @@ def hexdump(bytes):
         pass
 
 def save_to_pickle(tracetree, filename):
+    '''Save trace tree to pickle file
+
+    Args:
+        tracetree (str): The trace tree to dump
+        filename (str): Name of the file to dump the trace tree into
+    '''
     with io.open(filename, "wb+") as f:
         pickle.dump(tracetree, f)
 
 def load_from_pickle(filename):
+    '''Load trace tree from pickle file
+
+    Args:
+        filename (str): Name of the file to load the trace tree from
+    '''
     with io.open(filename, "rb") as f:
         return pickle.load(f)            
 
 def filter(frames, fil):
+    '''Filter the frame list
+
+    Args:
+        frames (list(EthFrame033)): Thje list of frames to filter
+        fil (list(str)): List of formated filter filter strings
+
+    Note:
+        The format of the filter is the following - protocol.field == value
+        The value must be a decimant int
+    '''
     filtered_frames = []
     for f in frames:
         pl = f
@@ -712,6 +735,12 @@ pretty_names = {
 }
 
 def export_human(tracetree, filename):
+    '''Saves the tracetree in a human redable format
+    
+    Args:
+        tracetree (str): The trace tree to dump
+        filename (str): Name of the file to dump the trace tree into
+    '''
     with io.open(filename, "w+") as f:
         i = 0
         for frm in tracetree.frames:
@@ -752,6 +781,10 @@ commands = { "open": ""
             , "export": "" }
 
 def run_cursed_ui(stdscr, tracetree):
+    '''Runs the user interface
+    
+    Note:
+        Tis a cursed place'''
     stdscrh, stdscrw = stdscr.getmaxyx()
 
     # frame menu
@@ -979,7 +1012,8 @@ def run_cursed_ui(stdscr, tracetree):
                 save_to_pickle(Trace033(frames), filename)
             elif cmd == "import_pickle":
                 filename = args[0].strip()
-                frames = load_from_pickle(filename).frames
+                tracetree = load_from_pickle(filename)
+                frames = tracetree.frames
 
                 topfrmidx = 0
                 selfrmidx = 0
@@ -1019,7 +1053,13 @@ def run_cursed_ui(stdscr, tracetree):
         frmpad_refresh()
         
         
-def main(path):
+def main():
+    print("Entrez un nom de fichier trace.")
+    path = input()
+    while os.path.isfile(path) == False :
+        print("Saisie incorrecte : Fichier introuvable.")
+        print("Veuillez réeffectuer votre saisie.")
+        path = input()
     ftrace = io.open(path, 'r')
 
     parser = TraceFileParser033()
@@ -1028,22 +1068,7 @@ def main(path):
     traceast = parser.parse(parser.lex(ftrace))
     tracetree = analyser.derive_tree(traceast)
 
-    export_human(tracetree, "test.txr")
-
     curses.wrapper(run_cursed_ui, tracetree)
 
-    print(len(tracetree.frames)+1)
-
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Analyze captured traffic")
-
-    ap.add_argument('Trace'
-                        , metavar='path'
-                        , type=str
-                        , help='path to the trace file')
-
-    args = ap.parse_args()
-
-    path = args.Trace
-
-    main(path)
+    main()

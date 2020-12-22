@@ -6,13 +6,11 @@
     ```python -m pip install windows-curses```
 
 ### Utilisation:
-    Le code s'execute avec la commande ```python projet.py cheminfichier``` ou
-    ```cheminfichier``` représente le chemin relatif d'un fichier trace par
-    rapport au script
+    Le code s'execute avec la commande ```python cybershark2077.py```
 
     Le programme va procéder à l'analyse du fichier trace passé en 
     entrée puis ouvrir l'interface graphique (veillez à avoir un terminal
-    assez grand lors de l'execution du programme car l'UI ne se redimmensionne
+    assez grand lors de l'execution du programme car l'UI ne se redimensionne
     pas).
 
     Vous pouvez ensuite naviguer à l'aide des flèches du clavier, bas haut pour 
@@ -25,13 +23,13 @@
     La fenêtre de droite elle affiche les valeures des champs contenus par les
     header.
 
-    Le programme est doté de quelque fonctions de manipulation des trames, 
+    Vous pouvez quitter le programme en appuyant sur la touche q
+
+### Fonctions
+    Le programme est doté de quelque fonctions de manipulation des donées, 
     vous pouvez éxécuter ces fonctions en appyant sur la touche f, un invite de
     commande s'affichera alors au bas de l'UI
 
-    Vous pouvez quitter le programme en appuyant sur la touche q
-
-### Filtres
     Le programme est doté d'une capacité de filtrage basique, pour l'utiliser il
     faut invoquer la fonction ```filter```. Les argument à soumettre sont les 
     filtres sur le  modèle ```protocole.champ == valeure``` ou champ est un 
@@ -44,3 +42,6 @@
     Il y a une fonctionnalité de d'import et d'xport à partir d'un depuis/vers
     un fichier binaire "pickle", utilisable grâce aux fonctions import_pickle et
     export_pickle avec le nom du fichier
+
+    Enfin il est possible d'exporter le résultat de l'analyse dans un format 
+    lisible par les humains avec la fonction ```dump_it```
