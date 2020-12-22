@@ -46,7 +46,8 @@ axiom = 'trace' # S -> T
 end_of_input = '$'
 
 # production rules
-# they are of the form ('element on the stack', 'element on the input'):['leftmost element', ..., 'rightmost element']
+# they are of the form 
+# ('element on the stack', 'element on the input'):['leftmost element', ..., 'rightmost element']
 productions = { ('trace', 'frame_fragment_offset'):['frame', 'end_of_frame', 'trace']
         , ('trace', '$'):[]
         , ('trace', 'end_of_frame'):['frame', 'end_of_frame', 'trace']
@@ -98,7 +99,8 @@ class FrameASTNode033:
 
     parent: weakref.ReferenceType
     frame_fragment: Optional[FragmentASTNode033] = None
-    frame: Optional[Any] = None # should be of type FrameNode033 but since you can't forward declare... fuck python
+    frame: Optional[Any] = None # should be of type FrameNode033 but since you 
+                                # can't forward declare... fuck python
     
 
 @dataclass
@@ -164,7 +166,8 @@ class TraceFileParser033:
         while(l := tracefile.readline()):
             m = re.match(e, l)
             if m: # if line read is matched by e
-                for g in m.groupdict().items(): # for all the key/value pair in the matchname/matchvalue
+                for g in m.groupdict().items(): # for all the key/value pair in 
+                                                # the matchname/matchvalue
                     tokens.append(g)
 
             p = tracefile.tell() # save current cursor pos
@@ -209,26 +212,35 @@ class TraceFileParser033:
         while len(stack)>0:
             s = stack.pop()
             if s in terminals:
-                if tokens[i][0] == s: # if token identifier matches element on top of the stack
+                if tokens[i][0] == s: # if token identifier matches element on 
+                                      # top of the stack
                     i += 1
                 else:
                     raise ValueError("bad token")
 
                 # AST logic
-                if s in nt_delimiters: # catch delimiter tokens and change position in AST to matching node
-                    while not isinstance(nodestack[-1], nt_classes[nt_delimiters[s]]): # pop stack while class of node is not class of nt associated delimiter
+                if s in nt_delimiters: # catch delimiter tokens and change 
+                                       # position in AST to matching node
+                    # pop stack while class of node is not class of nt 
+                    # associated delimiter
+                    while not isinstance(nodestack[-1], nt_classes[nt_delimiters[s]]): 
                         try:
                             nodestack.pop() # pop node children
                         except IndexError as e:
                             raise Exception('there is no node corresponding to this delimiter:' + s) from e
                 else:
-                    setattr(nodestack[-1], s, tokens[i-1][1]) # update value of key = elemnt of stack
+                    setattr(nodestack[-1], s, tokens[i-1][1]) # update value of 
+                                                              # key = elemnt of 
+                                                              # stack
 
             elif s in non_terminals:
                 rule = (s, tokens[i][0])
                 # print("rule:",rule)
                 if rule in productions:
-                    for r in reversed(productions[rule]): # reversed because leff hand elements must be evaluated first
+                    for r in reversed(productions[rule]): # reversed because 
+                                                          # left hand elements 
+                                                          # must be evaluated 
+                                                          # first
                         stack.append(r)
                 else:
                     raise ValueError("bad rule")
@@ -238,9 +250,11 @@ class TraceFileParser033:
                     node = nt_classes[s]()
                     ast.root = node
                 else:
-                    node = nt_classes[s](None) # TODO: find a way to get a hold of parent ref
-                    #node.parent = weakref.proxy(nodestack[-1]) # parent is node on top of the stack
-                    setattr(nodestack[-1], s, node) # update parents ref to child node
+                    node = nt_classes[s](None)
+                    # node.parent = weakref.proxy(nodestack[-1]) # parent is 
+                    # node on top of the stack
+                    setattr(nodestack[-1], s, node) # update parents ref to *
+                                                    # child node
                 nodestack.append(node)
 
         print("Succesfully parsed input")
@@ -267,7 +281,8 @@ class HttpMessage:
     def from_bytes(cls, http_data):
 
         split = http_data.split(b'\r\n\r\n', 1)
-        if split[0].find(b'HTTP') != -1: # if HTTP good chance that this is header
+        if split[0].find(b'HTTP') != -1: # if HTTP good chance that this is 
+                                         # header
             http_header, http_message = split
             http_message = b'\r\n\r\n' + http_message
 
@@ -284,7 +299,9 @@ TCP_KNOWN_PORTS = {
 
 TCP_HDR_STRUCT_FMT = '!2s2s4s4s2s2s2s2s'
 
-TcpHdr = namedtuple('HTCP', ['src_port', 'dst_port', 'seq', 'acknum', 'hl', 'flags', 'ecn', 'cwr', 'ece', 'urg', 'ack', 'psh', 'rst', 'syn', 'fin', 'win', 'chksum', 'urgp'])
+TcpHdr = namedtuple('HTCP', ['src_port', 'dst_port', 'seq', 'acknum', 'hl'
+                    , 'flags', 'ecn', 'cwr', 'ece', 'urg', 'ack', 'psh', 'rst' 
+                    , 'syn', 'fin', 'win', 'chksum', 'urgp'])
 @dataclass
 class TCPSegment033:
     '''Represents a TCP segment
@@ -387,7 +404,9 @@ IP4_OPT_LEN = {
     18: 12
 }
 
-Ipv4Header033 = namedtuple('Ipv4Header033', ['version', 'ihl', 'tos', 'tlength', 'id', 'flags', 'df', 'mf', 'frag_offset', 'ttl', 'proto', 'checksum', 'src', 'dst'])
+Ipv4Header033 = namedtuple('Ipv4Header033', ['version', 'ihl', 'tos', 'tlength' 
+                           , 'id', 'flags', 'df', 'mf', 'frag_offset', 'ttl'
+                           , 'proto', 'checksum', 'src', 'dst'])
 
 # TODO: fix flags offsets
 @dataclass
@@ -495,12 +514,17 @@ class EthFrame033:
     def header(self):
         '''Returns the header as a NamedTuple'''
 
-        e = struct.unpack_from('!H', self.header_data, 12)[0] # attempts to read the ethernet type of the packet from the data
+        e = struct.unpack_from('!H', self.header_data, 12)[0] # attempts to read
+                                                              # the ethernet 
+                                                              # type of the 
+                                                              # packet from the 
+                                                              # data
         if e in ETH_TYPE: # if header format is known initialize the header
             return EthHdr[e]._make(struct.unpack(ETH_HDR_STRUCT_FMT[e], self.header_data))
         else:
             warnings.warn("Unknow ether type: can't parse frame")
-            return self.header_data # if the header format is not understood, returns the frame data instead
+            return self.header_data # if the header format is not understood, 
+                                    # returns the frame data instead
 
     @classmethod
     def from_bytes(cls, frame_data):
@@ -513,7 +537,10 @@ class EthFrame033:
             A EthFrame033 object instanciated using the raw data
         '''
 
-        etype = struct.unpack_from('!H', frame_data, 12)[0] # attempts to read the ethernet type of the packet from the data
+        etype = struct.unpack_from('!H', frame_data, 12)[0] # attempts to read 
+                                                            # the ethernet type 
+                                                            # of the packet from 
+                                                            # the data
         if etype in ETH_TYPE: # if header format is known initialize the header
             h_size = struct.calcsize(ETH_HDR_STRUCT_FMT[etype])
             fh = bytes(frame_data[0:h_size])
@@ -549,7 +576,8 @@ def extend_pack_into(format, buffer, offset, *v):
     '''
 
     if len(buffer) < offset + struct.calcsize(format):
-        buffer = buffer.ljust(offset + struct.calcsize(format), b'\xff') # padding character is 0xff
+        # padding character is 0xff
+        buffer = buffer.ljust(offset + struct.calcsize(format), b'\xff') 
     struct.pack_into(format, buffer, offset, *v)
     return buffer
 
@@ -567,7 +595,11 @@ class TraceAnalyser033:
                 raw_data = framenode.frame_fragment.frame_fragment_data
                 partial_data = bytes.fromhex(raw_data)
 
-                if framenode.frame.frame_fragment != None: # if next frame contains no fragment that means code reached end of frame structure
+                if framenode.frame.frame_fragment != None: # if next frame 
+                                                           # contains no 
+                                                           # fragment that means 
+                                                           # code reached end of 
+                                                           # frame structure
                     nextoff = int(framenode.frame.frame_fragment.frame_fragment_offset, 16)
                     curoff = int(framenode.frame_fragment.frame_fragment_offset, 16)
                     if curoff + len(partial_data) != nextoff:
@@ -604,7 +636,9 @@ class TraceAnalyser033:
 
 
     def derive_tree(self, ast):
-        '''Derive a tree representing the trace from the AST produced by the parse method'''
+        '''Derive a tree representing the trace from the AST produced by the 
+                parse method
+        '''
         trace_data = self.extract_trace_data(ast.root)
         frames = []
         for frame_data in trace_data:
@@ -616,7 +650,8 @@ class TraceAnalyser033:
         return Trace033(frames)
 
 
-# code adapted from https://www.geoffreybrown.com/blog/a-hexdump-program-in-python/
+# code adapted from 
+# https://www.geoffreybrown.com/blog/a-hexdump-program-in-python/
 def hexdump(bytes):
     try:
         with io.BytesIO(bytes) as b:
@@ -625,9 +660,12 @@ def hexdump(bytes):
 
             while s:
                 s1 = " ".join([f"{i:02x}" for i in s]) # hex string
-                s1 = s1[0:23] + " " + s1[23:]          # insert extra space between groups of 8 hex values
+                s1 = s1[0:23] + " " + s1[23:]          # insert extra space 
+                                                       # between groups of 8 hex 
+                                                       # values
 
-                s2 = "".join([chr(i) if 32 <= i <= 127 else "." for i in s]) # ascii string; chained comparison
+                # ascii string; chained comparison
+                s2 = "".join([chr(i) if 32 <= i <= 127 else "." for i in s]) 
 
                 print(f"{n * 16:08x}  {s1:<48}  |{s2}|")
 
@@ -718,7 +756,7 @@ pretty_names = {
                         , "dst_port": "destination port: 0x{1:x} - {1:d}"
                         , "seq": "sequence number: 0x{1:x} - {1:d}"
                         , "acknum": "acknowledgement number: 0x{1:x} - {1:d}"
-                        , "hl": "header length: 0x{1:x} - {1:d}"
+                        , "hl": "header length: 0x{1:x} - {1:d} 32 bit words"
                         , "flags": "flags: 0x{1:x} - {1:d}"
                         , "ecn": "...{1:d} .... .... - Nonce"
                         , "cwr": ".... {1:d}... .... - Congestion Window Reduced"
@@ -800,7 +838,8 @@ def run_cursed_ui(stdscr, tracetree):
 
     frmpadh = len(tracetree.frames)
     frmpadw = frmwinw-2
-    frmpadtl = (frmwiny+2, frmwinx+1) # position of top left corner of pad on screen
+    frmpadtl = (frmwiny+2, frmwinx+1) # position of top left corner of pad on 
+                                      # screen
     frmpadbr = (frmwinh-2, frmwinw-2) # position of bottom right corner
 
     frmpad = curses.newpad(frmpadh, frmpadw)
@@ -926,6 +965,8 @@ def run_cursed_ui(stdscr, tracetree):
             frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_STANDOUT)
 
         elif k == "\n" or k == "KEY_B3": # enter header menu
+            if len(frames) == 0:
+                continue
             maxhdridx = len(protocol_stack)-1 # maybe rename layer
             hdrpad.chgat(selhdridx, 0, hdrpadw, curses.A_STANDOUT)
             hdrpad_refresh()
@@ -983,8 +1024,6 @@ def run_cursed_ui(stdscr, tracetree):
                             
         elif k == "q":
             exit(0)
-        else: # debug
-            print(k)
 
 
         if k == "f":
@@ -993,8 +1032,6 @@ def run_cursed_ui(stdscr, tracetree):
             stdscr.move(stdscrh-2, 3)
             input = stdscr.getstr(stdscrh-2, 3, stdscrw).decode("utf-8")
             curses.echo(False)
-
-            err = ""
 
             cmd, *args = input.split(":", 1)
             if len(args)>0:
@@ -1037,9 +1074,6 @@ def run_cursed_ui(stdscr, tracetree):
                 export_human(tracetree, filename)
             else:
                 stdscr.addstr(stdscrh-2, 1, "Command unknown")
-            
-            if err != "":
-                pass
         
         
         frmpad.erase()              
@@ -1049,7 +1083,6 @@ def run_cursed_ui(stdscr, tracetree):
 
         stdscr.move(stdscrh-1, 0)
         stdscr.clrtoeol()
-        # stdscr.addstr(stdscrh-1, 0, "sf:{} tf:{}".format(selfrmidx, topfrmidx)) # debug
         frmpad_refresh()
         
         
