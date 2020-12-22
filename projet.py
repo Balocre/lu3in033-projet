@@ -633,39 +633,29 @@ def load_from_pickle(filename):
     with io.open(filename, "rb") as f:
         return pickle.load(f)
 
-def filter(trace, fil):
-    pdict = {
-        "ethernet": None,
-        "ipv4": None,
-        "tcp": None,
-        "http": None
-    }
-    frames = []
-    for f in trace.frames:
+def filter(frames, fil):
+    filtered_frames = []
+    for f in frames:
         pl = f
-        add = 1
+        add = 0
         while True:
-            pdict[pl.PROTO] = pl
-            ethernet = pdict["ethernet"]
-            ipv4 = pdict["ipv4"]
-            tcp = pdict["tcp"]
-            http = pdict["http"]
             for e in fil:
-                try:
-                    if eval(e) == False:
-                        add = 0
-                except AttributeError as e:
-                    pass
-                    
-            if add == 0:
-                break
+                proto, field, op, val = re.split('\s|\.', e)
+                val = int(val) 
+
+                if pl.PROTO == proto:
+                    if hasattr(pl.header, field):
+                        if int(getattr(pl.header, field).hex(), 16) == val:
+                            add = 1
 
             if hasattr(pl, "payload") and pl.payload != None and not isinstance(pl.payload, bytes):
                 pl = pl.payload
             else:
                 break
         if add == 1:
-            frames.append(f)
+            filtered_frames.append(f)
+    
+    return filtered_frames
 
 
 UP = -1
@@ -713,7 +703,7 @@ pretty_names = {
 }
 
 commands = { "open": ""
-            , "filter": ""
+            , "filter": filter
             , "hexdump": ""
             , "export": "" }
 
@@ -781,37 +771,42 @@ def run_cursed_ui(stdscr, tracetree):
     selfrmidx = 0
     maxfrmidx = len(tracetree.frames)
   
-    # populate the frame list into the the frame pad
-    frames = []
     frames = tracetree.frames
-    i = 0
-    for f in frames:
-        if isinstance(f, bytes):
-            protos = "unknown"
-            size = len(f)
-        else:
-            p = f
-            protos = ""
-            while True:
-                protos += p.PROTO if hasattr(p, "PROTO") else "unknown"
-                if hasattr(p, "payload") and p.payload != None:
-                    protos += ":"
-                    p = p.payload
-                else:
-                    break
-            size = f.size
-        s = f"0x{i:04x} " + protos + f" {size}"
-        frmpad.addstr(i, 0, s)
-        i += 1
-    frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_STANDOUT)
-    
-    stdscr.refresh()
-    frmpad_refresh()
 
-    print(hdrpadh, hdrpadw, hdrpadtl, hdrpadbr) # debug
+    # print(hdrpadh, hdrpadw, hdrpadtl, hdrpadbr) # debug
 
     # main UI loop
     while True:
+        # populate the frame list into the the frame pad
+        frmpad.erase()
+        frmpad_refresh()
+        frmpadh = len(frames)
+        frmpad.resize(frmpadh, frmpadw)
+        
+        i = 0
+        for f in frames:
+            if isinstance(f, bytes):
+                protos = "unknown"
+                size = len(f)
+            else:
+                p = f
+                protos = ""
+                while True:
+                    protos += p.PROTO if hasattr(p, "PROTO") else "unknown"
+                    if hasattr(p, "payload") and p.payload != None:
+                        protos += ":"
+                        p = p.payload
+                    else:
+                        break
+                size = f.size
+            s = f"0x{i:04x} " + protos + f" {size}"
+            frmpad.addstr(i, 0, s)
+            i += 1
+        frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_STANDOUT)
+        
+        stdscr.refresh()
+        frmpad_refresh()
+
         selhdridx = 0
 
         hdrpad.erase()
@@ -819,7 +814,7 @@ def run_cursed_ui(stdscr, tracetree):
     
         # build the protocol stack for selected frame
         protocol_stack = []
-        pl = tracetree.frames[selfrmidx]
+        pl = frames[selfrmidx]
         i = 0
         while True:
             protocol_stack.append(pl)
@@ -904,16 +899,42 @@ def run_cursed_ui(stdscr, tracetree):
                 elif k == "q":
                     exit(0)
 
+                if k == "f":
+                    break
+
                 hdrpad_refresh()
-            continue
+                            
         elif k == "q":
             exit(0)
         else: # debug
             print(k)
 
+
+        if k == "f":
+            stdscr.move(stdscrh-2, 1)
+            curses.echo(True)
+            input = stdscr.getstr(stdscrh-2, 1, stdscrw).decode("utf-8")
+            stdscr.move(stdscrh-2, 1)
+            stdscr.clrtoeol()
+            curses.echo(False)
+
+            cmd, *args = input.split(":", 1)
+            if len(args)>0:
+                args = args[0].split(",")
+            if cmd == "filter":
+                try:
+                    frames = filter(frames, args)
+
+                    topfrmidx = 0
+                    selfrmidx = 0
+                except ValueError as e:
+                    pass
+
+
+
         stdscr.move(stdscrh-1, 0)
         stdscr.clrtoeol()
-        stdscr.addstr(stdscrh-1, 0, "sf:{} tf:{}".format(selfrmidx, topfrmidx))
+        # stdscr.addstr(stdscrh-1, 0, "sf:{} tf:{}".format(selfrmidx, topfrmidx)) # debug
         frmpad_refresh()
         
         
@@ -926,7 +947,7 @@ def main(path):
     traceast = parser.parse(parser.lex(ftrace))
     tracetree = analyser.derive_tree(traceast)
 
-    t = filter(tracetree, ["tcp.src_port == 80"])
+    t = filter(tracetree.frames, ["tcp.src_port == 80"])
 
     curses.wrapper(run_cursed_ui, tracetree)
 
