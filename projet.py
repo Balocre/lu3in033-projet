@@ -778,6 +778,7 @@ def run_cursed_ui(stdscr, tracetree):
     # main UI loop
     while True:
         # populate the frame list into the the frame pad
+
         frmpad.erase()
         frmpad_refresh()
         frmpadh = len(frames)
@@ -835,6 +836,9 @@ def run_cursed_ui(stdscr, tracetree):
         fldpad_refresh()
 
         k = stdscr.getkey()
+
+        stdscr.move(stdscrh-2, 1)
+        stdscr.clrtoeol()
         
         if k == "KEY_A2":   
             frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_NORMAL)
@@ -911,12 +915,13 @@ def run_cursed_ui(stdscr, tracetree):
 
 
         if k == "f":
-            stdscr.move(stdscrh-2, 1)
+            stdscr.addstr(stdscrh-2, 2, ">")
             curses.echo(True)
-            input = stdscr.getstr(stdscrh-2, 1, stdscrw).decode("utf-8")
-            stdscr.move(stdscrh-2, 1)
-            stdscr.clrtoeol()
+            stdscr.move(stdscrh-2, 3)
+            input = stdscr.getstr(stdscrh-2, 3, stdscrw).decode("utf-8")
             curses.echo(False)
+
+            err = ""
 
             cmd, *args = input.split(":", 1)
             if len(args)>0:
@@ -927,7 +932,7 @@ def run_cursed_ui(stdscr, tracetree):
 
                     topfrmidx = 0
                     selfrmidx = 0
-                except ValueError as e:
+                except ValueError as err:
                     pass
             elif cmd == "export_pickle":
                 args = args[0].strip()
@@ -940,8 +945,21 @@ def run_cursed_ui(stdscr, tracetree):
                 selfrmidx = 0
             elif cmd == "reset_filter":
                 frames = tracetree.frames
+            elif cmd == "open":
+                args = args[0].strip()
+                with io.open(args, "r") as f:
+                    parser = TraceFileParser033()
+                    analyser = TraceAnalyser033()
 
+                    traceast = parser.parse(parser.lex(f))
+                    tracetree = analyser.derive_tree(traceast)
 
+                    frames = tracetree.frames
+            else:
+                stdscr.addstr(stdscrh-2, 1, "Command unknown")
+
+            if err:
+                pass
 
         stdscr.move(stdscrh-1, 0)
         stdscr.clrtoeol()
@@ -957,8 +975,6 @@ def main(path):
 
     traceast = parser.parse(parser.lex(ftrace))
     tracetree = analyser.derive_tree(traceast)
-
-    t = filter(tracetree.frames, ["tcp.src_port == 80"])
 
     curses.wrapper(run_cursed_ui, tracetree)
 
