@@ -253,8 +253,9 @@ class HttpMessage:
     
     @property
     def size(self):
-        return len(self.header_data) if self.header_data != None else 0 \
-                + len(self.message_data) if self.message_data != None else 0
+        sh = len(self.header_data) if self.header_data != None else 0
+        sm = len(self.message_data) if self.message_data != None else 0
+        return sh + sm
 
     @property
     def header(self):
@@ -266,6 +267,7 @@ class HttpMessage:
         split = http_data.split(b'\r\n\r\n', 1)
         if split[0].find(b'HTTP') != -1: # if HTTP good chance that this is header
             http_header, http_message = split
+            http_message = b'\r\n\r\n' + http_message
 
         else:
             http_header = None
@@ -299,11 +301,14 @@ class TCPSegment033:
     @property
     def size(self):
         '''Returns the size in bytes of the segment'''
-        return len(self.header_data) \
-                + len(self.opt_data) \
-                + self.payload.size if not isinstance(self.payload, bytes) and self.payload != None \
+
+        s = self.payload.size if not isinstance(self.payload, bytes) and self.payload != None \
                                     else len(self.payload) if self.payload != None else 0
 
+
+        return len(self.header_data) \
+                + len(self.opt_data) \
+                + s
     @property
     def header(self):
         '''Returns the header as a NamedTuple'''
@@ -407,9 +412,11 @@ class IPv4Packet033:
     def size(self):
         '''Returns the size in bytes of the packet'''
 
+        s = self.payload.size if not isinstance(self.payload, bytes) else len(self.payload)
+
         return len(self.header_data) \
                 + len(self.opt_data) \
-                + self.payload.size if not isinstance(self.payload, bytes) else len(self.payload)
+                + s
 
     @property
     def header(self):
@@ -478,7 +485,9 @@ class EthFrame033:
 
     @property
     def size(self):
-        return struct.calcsize(ETH_HDR_STRUCT_FMT[0x0800]) + self.payload.size if not isinstance(self.payload, bytes) else len(self.payload)
+        s = self.payload.size if not isinstance(self.payload, bytes) else len(self.payload)
+
+        return len(self.header_data) + s
 
     @property
     def header(self):
@@ -781,7 +790,6 @@ def run_cursed_ui(stdscr, tracetree):
         frmpadh = len(frames) if len(frames) > 0 else 1
         frmpad_refresh()
         frmpad.resize(frmpadh, frmpadw)
-        
         
         i = 0
         for f in frames:
