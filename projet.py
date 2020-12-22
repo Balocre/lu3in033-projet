@@ -640,7 +640,7 @@ def save_to_pickle(tracetree, filename):
 
 def load_from_pickle(filename):
     with io.open(filename, "rb") as f:
-        return pickle.load(f)
+        return pickle.load(f)            
 
 def filter(frames, fil):
     filtered_frames = []
@@ -710,6 +710,41 @@ pretty_names = {
                         , "chksum": "checksum: 0x{1:x} - {1:d}"
                         , "urgp": "urgent pointer: 0x{1:x} - {1:d}"}
 }
+
+def export_human(tracetree, filename):
+    with io.open(filename, "w+") as f:
+        i = 0
+        for frm in tracetree.frames:
+            f.write(f"Frame {i:d}\n\n")
+            p = frm
+            j = 0
+            while True:
+                h = p.header
+                f.write(p.PROTO + ": \n")
+                if type(p) == HttpMessage:
+                    buf = io.StringIO(p.header)
+                    n = 1
+                    while l := buf.readline():
+                        n+=1
+                    buf.seek(0)
+
+                    i = 0
+                    while l := buf.readline().strip("\r\n"):
+                        f.write("\t" + l + "\n")
+                        i+=1
+                else:
+                    for field_name, field_value in h._asdict().items():
+                        s = pretty_names.get(type(p)) \
+                                    .get(field_name, f"{field_name} : {field_value.hex()}") \
+                                    .format(field_value, int(field_value.hex(), 16))
+                        f.write("\t" + s + "\n")
+                if hasattr(p, "payload") and (p.payload != None and not isinstance(p.payload, bytes)):
+                    p = p.payload
+                else:
+                    break
+                j += 1
+            f.write("\n")
+            i += 1
 
 commands = { "open": ""
             , "filter": filter
@@ -879,7 +914,7 @@ def run_cursed_ui(stdscr, tracetree):
                     buf.seek(0)
                     fldpad.resize(n, fldpadw)
                     i = 0
-                    while l := buf.readline(fldpadw):
+                    while l := buf.readline(fldpadw).strip("\r\n"):
                         fldpad.addstr(i, 0, l)
                         i+=1
                 else:
@@ -940,19 +975,19 @@ def run_cursed_ui(stdscr, tracetree):
                 except ValueError as err:
                     pass
             elif cmd == "export_pickle":
-                args = args[0].strip()
-                save_to_pickle(Trace033(frames), args)
+                filename = args[0].strip()
+                save_to_pickle(Trace033(frames), filename)
             elif cmd == "import_pickle":
-                args = args[0].strip()
-                frames = load_from_pickle(args).frames
+                filename = args[0].strip()
+                frames = load_from_pickle(filename).frames
 
                 topfrmidx = 0
                 selfrmidx = 0
             elif cmd == "reset_filter":
                 frames = tracetree.frames
             elif cmd == "open":
-                args = args[0].strip()
-                with io.open(args, "r") as f:
+                filename = args[0].strip()
+                with io.open(filename, "r") as f:
                     parser = TraceFileParser033()
                     analyser = TraceAnalyser033()
 
@@ -963,6 +998,9 @@ def run_cursed_ui(stdscr, tracetree):
 
                     topfrmidx = 0
                     selfrmidx = 0
+            elif cmd == "dump_it":
+                filename = args[0].strip()
+                export_human(tracetree, filename)
             else:
                 stdscr.addstr(stdscrh-2, 1, "Command unknown")
             
@@ -989,6 +1027,8 @@ def main(path):
 
     traceast = parser.parse(parser.lex(ftrace))
     tracetree = analyser.derive_tree(traceast)
+
+    export_human(tracetree, "test.txr")
 
     curses.wrapper(run_cursed_ui, tracetree)
 

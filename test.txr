@@ -1,0 +1,677 @@
+Frame 0
+
+ethernet: 
+	dst: 54:8d:5a:56:c7:55
+	src: be:9a:e5:d5:31:7d
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x28
+	total length: 0x76 - 118
+	id: 0xbd58 - 48472
+	flags: 0x40
+	1. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0xfb - 251
+	protocol: 0x6
+	checksum: 0xac21 - 44065
+	source adress: 0xa29f86ea - 162.159.134.234
+	destination adress: 0xc0a82bad - 192.168.43.173
+tcp: 
+	source port: 0x1bb - 443
+	destination port: 0xe663 - 58979
+	sequence number: 0x320aadef - 839560687
+	acknowledgement number: 0xed2953c0 - 3978908608
+	header length: 0x5 - 5
+	flags: 0x18 - 24
+	...0 .... .... - Nonce
+	.... 0... .... - Congestion Window Reduced
+	.... .0.. .... - ECN-Echo
+	.... ..0. .... - Urgent
+	.... ...1 .... - Acknowledgement
+	.... .... 1... - Push
+	.... .... .0.. - Reset
+	.... .... ..0. - Syn
+	.... .... ...0 - Fin
+	window: 0x91f - 2335
+	checksum: 0x52ed - 21229
+	urgent pointer: 0x0 - 0
+
+Frame 1
+
+ethernet: 
+	dst: 54:8d:5a:56:c7:55
+	src: be:9a:e5:d5:31:7d
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x28
+	total length: 0x28 - 40
+	id: 0xc3ec - 50156
+	flags: 0x40
+	1. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0xfb - 251
+	protocol: 0x6
+	checksum: 0xf6fd - 63229
+	source adress: 0x3390a4d7 - 51.144.164.215
+	destination adress: 0xc0a82bad - 192.168.43.173
+tcp: 
+	source port: 0x1bb - 443
+	destination port: 0xe8e0 - 59616
+	sequence number: 0x28671cfe - 677846270
+	acknowledgement number: 0x727c2072 - 1920737394
+	header length: 0x5 - 5
+	flags: 0x14 - 20
+	...0 .... .... - Nonce
+	.... 0... .... - Congestion Window Reduced
+	.... .0.. .... - ECN-Echo
+	.... ..0. .... - Urgent
+	.... ...1 .... - Acknowledgement
+	.... .... 0... - Push
+	.... .... .1.. - Reset
+	.... .... ..0. - Syn
+	.... .... ...0 - Fin
+	window: 0x0 - 0
+	checksum: 0x2824 - 10276
+	urgent pointer: 0x0 - 0
+
+Frame 2
+
+ethernet: 
+	dst: be:9a:e5:d5:31:7d
+	src: 54:8d:5a:56:c7:55
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x0
+	total length: 0x28 - 40
+	id: 0x271b - 10011
+	flags: 0x0
+	0. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0x80 - 128
+	protocol: 0x6
+	checksum: 0x0 - 0
+	source adress: 0xc0a82bad - 192.168.43.173
+	destination adress: 0xa29f86ea - 162.159.134.234
+tcp: 
+	source port: 0xe663 - 58979
+	destination port: 0x1bb - 443
+	sequence number: 0xed2953c0 - 3978908608
+	acknowledgement number: 0x320aae3d - 839560765
+	header length: 0x5 - 5
+	flags: 0x10 - 16
+	...0 .... .... - Nonce
+	.... 0... .... - Congestion Window Reduced
+	.... .0.. .... - ECN-Echo
+	.... ..0. .... - Urgent
+	.... ...1 .... - Acknowledgement
+	.... .... 0... - Push
+	.... .... .0.. - Reset
+	.... .... ..0. - Syn
+	.... .... ...0 - Fin
+	window: 0xff - 255
+	checksum: 0x8fa5 - 36773
+	urgent pointer: 0x0 - 0
+
+Frame 3
+
+ethernet: 
+	dst: be:9a:e5:d5:31:7d
+	src: 54:8d:5a:56:c7:55
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x0
+	total length: 0x8d - 141
+	id: 0x14f2 - 5362
+	flags: 0x40
+	1. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0x80 - 128
+	protocol: 0x6
+	checksum: 0x0 - 0
+	source adress: 0xc0a82bad - 192.168.43.173
+	destination adress: 0x2843fb84 - 40.67.251.132
+tcp: 
+	source port: 0xe650 - 58960
+	destination port: 0x1bb - 443
+	sequence number: 0x51a5dcc - 85614028
+	acknowledgement number: 0x4f124b97 - 1326599063
+	header length: 0x5 - 5
+	flags: 0x18 - 24
+	...0 .... .... - Nonce
+	.... 0... .... - Congestion Window Reduced
+	.... .0.. .... - ECN-Echo
+	.... ..0. .... - Urgent
+	.... ...1 .... - Acknowledgement
+	.... .... 1... - Push
+	.... .... .0.. - Reset
+	.... .... ..0. - Syn
+	.... .... ...0 - Fin
+	window: 0xfc - 252
+	checksum: 0x109d - 4253
+	urgent pointer: 0x0 - 0
+
+Frame 4
+
+ethernet: 
+	dst: be:9a:e5:d5:31:7d
+	src: 54:8d:5a:56:c7:55
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x0
+	total length: 0x50 - 80
+	id: 0x637a - 25466
+	flags: 0x0
+	0. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0x80 - 128
+	protocol: 0x11
+	checksum: 0x0 - 0
+	source adress: 0xc0a82bad - 192.168.43.173
+	destination adress: 0xc0a82b01 - 192.168.43.1
+
+Frame 5
+
+ethernet: 
+	dst: 54:8d:5a:56:c7:55
+	src: be:9a:e5:d5:31:7d
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x28
+	total length: 0x28 - 40
+	id: 0xdcea - 56554
+	flags: 0x40
+	1. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0xfb - 251
+	protocol: 0x6
+	checksum: 0x929f - 37535
+	source adress: 0x2843fb84 - 40.67.251.132
+	destination adress: 0xc0a82bad - 192.168.43.173
+tcp: 
+	source port: 0x1bb - 443
+	destination port: 0xe650 - 58960
+	sequence number: 0x4f124b97 - 1326599063
+	acknowledgement number: 0x51a5e31 - 85614129
+	header length: 0x5 - 5
+	flags: 0x10 - 16
+	...0 .... .... - Nonce
+	.... 0... .... - Congestion Window Reduced
+	.... .0.. .... - ECN-Echo
+	.... ..0. .... - Urgent
+	.... ...1 .... - Acknowledgement
+	.... .... 0... - Push
+	.... .... .0.. - Reset
+	.... .... ..0. - Syn
+	.... .... ...0 - Fin
+	window: 0x7e3 - 2019
+	checksum: 0xb1d3 - 45523
+	urgent pointer: 0x0 - 0
+
+Frame 6
+
+ethernet: 
+	dst: 54:8d:5a:56:c7:55
+	src: be:9a:e5:d5:31:7d
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x0
+	total length: 0xba - 186
+	id: 0x2092 - 8338
+	flags: 0x40
+	1. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0x40 - 64
+	protocol: 0x11
+	checksum: 0x41a2 - 16802
+	source adress: 0xc0a82b01 - 192.168.43.1
+	destination adress: 0xc0a82bad - 192.168.43.173
+
+Frame 7
+
+ethernet: 
+	dst: be:9a:e5:d5:31:7d
+	src: 54:8d:5a:56:c7:55
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x0
+	total length: 0x34 - 52
+	id: 0xd910 - 55568
+	flags: 0x40
+	1. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0x80 - 128
+	protocol: 0x6
+	checksum: 0x0 - 0
+	source adress: 0xc0a82bad - 192.168.43.173
+	destination adress: 0x687b17de - 104.123.23.222
+tcp: 
+	source port: 0xe8f1 - 59633
+	destination port: 0x50 - 80
+	sequence number: 0xede4ba33 - 3991190067
+	acknowledgement number: 0x0 - 0
+	header length: 0x8 - 8
+	flags: 0x2 - 2
+	...0 .... .... - Nonce
+	.... 0... .... - Congestion Window Reduced
+	.... .0.. .... - ECN-Echo
+	.... ..0. .... - Urgent
+	.... ...0 .... - Acknowledgement
+	.... .... 0... - Push
+	.... .... .0.. - Reset
+	.... .... ..1. - Syn
+	.... .... ...0 - Fin
+	window: 0xfaf0 - 64240
+	checksum: 0x6cd5 - 27861
+	urgent pointer: 0x0 - 0
+
+Frame 8
+
+ethernet: 
+	dst: 54:8d:5a:56:c7:55
+	src: be:9a:e5:d5:31:7d
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x28
+	total length: 0xd3 - 211
+	id: 0xddce - 56782
+	flags: 0x40
+	1. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0xfb - 251
+	protocol: 0x6
+	checksum: 0x9110 - 37136
+	source adress: 0x2843fb84 - 40.67.251.132
+	destination adress: 0xc0a82bad - 192.168.43.173
+tcp: 
+	source port: 0x1bb - 443
+	destination port: 0xe650 - 58960
+	sequence number: 0x4f124b97 - 1326599063
+	acknowledgement number: 0x51a5e31 - 85614129
+	header length: 0x5 - 5
+	flags: 0x18 - 24
+	...0 .... .... - Nonce
+	.... 0... .... - Congestion Window Reduced
+	.... .0.. .... - ECN-Echo
+	.... ..0. .... - Urgent
+	.... ...1 .... - Acknowledgement
+	.... .... 1... - Push
+	.... .... .0.. - Reset
+	.... .... ..0. - Syn
+	.... .... ...0 - Fin
+	window: 0x7e3 - 2019
+	checksum: 0x499f - 18847
+	urgent pointer: 0x0 - 0
+
+Frame 9
+
+ethernet: 
+	dst: 54:8d:5a:56:c7:55
+	src: be:9a:e5:d5:31:7d
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x28
+	total length: 0x34 - 52
+	id: 0xdee8 - 57064
+	flags: 0x40
+	1. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0xfb - 251
+	protocol: 0x6
+	checksum: 0x3404 - 13316
+	source adress: 0x687b17de - 104.123.23.222
+	destination adress: 0xc0a82bad - 192.168.43.173
+tcp: 
+	source port: 0x50 - 80
+	destination port: 0xe8f1 - 59633
+	sequence number: 0x6147fe6a - 1632108138
+	acknowledgement number: 0xede4ba34 - 3991190068
+	header length: 0x8 - 8
+	flags: 0x12 - 18
+	...0 .... .... - Nonce
+	.... 0... .... - Congestion Window Reduced
+	.... .0.. .... - ECN-Echo
+	.... ..0. .... - Urgent
+	.... ...1 .... - Acknowledgement
+	.... .... 0... - Push
+	.... .... .0.. - Reset
+	.... .... ..1. - Syn
+	.... .... ...0 - Fin
+	window: 0x5b40 - 23360
+	checksum: 0xb708 - 46856
+	urgent pointer: 0x0 - 0
+
+Frame 10
+
+ethernet: 
+	dst: be:9a:e5:d5:31:7d
+	src: 54:8d:5a:56:c7:55
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x0
+	total length: 0x28 - 40
+	id: 0xd911 - 55569
+	flags: 0x40
+	1. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0x80 - 128
+	protocol: 0x6
+	checksum: 0x0 - 0
+	source adress: 0xc0a82bad - 192.168.43.173
+	destination adress: 0x687b17de - 104.123.23.222
+tcp: 
+	source port: 0xe8f1 - 59633
+	destination port: 0x50 - 80
+	sequence number: 0xede4ba34 - 3991190068
+	acknowledgement number: 0x6147fe6b - 1632108139
+	header length: 0x5 - 5
+	flags: 0x10 - 16
+	...0 .... .... - Nonce
+	.... 0... .... - Congestion Window Reduced
+	.... .0.. .... - ECN-Echo
+	.... ..0. .... - Urgent
+	.... ...1 .... - Acknowledgement
+	.... .... 0... - Push
+	.... .... .0.. - Reset
+	.... .... ..0. - Syn
+	.... .... ...0 - Fin
+	window: 0x100 - 256
+	checksum: 0x6cc9 - 27849
+	urgent pointer: 0x0 - 0
+
+Frame 11
+
+ethernet: 
+	dst: be:9a:e5:d5:31:7d
+	src: 54:8d:5a:56:c7:55
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x0
+	total length: 0xfd - 253
+	id: 0xd912 - 55570
+	flags: 0x40
+	1. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0x80 - 128
+	protocol: 0x6
+	checksum: 0x0 - 0
+	source adress: 0xc0a82bad - 192.168.43.173
+	destination adress: 0x687b17de - 104.123.23.222
+tcp: 
+	source port: 0xe8f1 - 59633
+	destination port: 0x50 - 80
+	sequence number: 0xede4ba34 - 3991190068
+	acknowledgement number: 0x6147fe6b - 1632108139
+	header length: 0x5 - 5
+	flags: 0x18 - 24
+	...0 .... .... - Nonce
+	.... 0... .... - Congestion Window Reduced
+	.... .0.. .... - ECN-Echo
+	.... ..0. .... - Urgent
+	.... ...1 .... - Acknowledgement
+	.... .... 1... - Push
+	.... .... .0.. - Reset
+	.... .... ..0. - Syn
+	.... .... ...0 - Fin
+	window: 0x100 - 256
+	checksum: 0x6d9e - 28062
+	urgent pointer: 0x0 - 0
+http: 
+	GET /en-US/livetile/preinstall?region=FR&appid=C98EA5B0842DBB9405BBF071E1DA76512D21FE36&FORM=Threshold HTTP/1.1
+	Connection: Keep-Alive
+	User-Agent: Microsoft-WNS/10.0
+	Host: tile-service.weather.microsoft.com
+
+Frame 5
+
+ethernet: 
+	dst: be:9a:e5:d5:31:7d
+	src: 54:8d:5a:56:c7:55
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x0
+	total length: 0x28 - 40
+	id: 0x14f3 - 5363
+	flags: 0x40
+	1. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0x80 - 128
+	protocol: 0x6
+	checksum: 0x0 - 0
+	source adress: 0xc0a82bad - 192.168.43.173
+	destination adress: 0x2843fb84 - 40.67.251.132
+tcp: 
+	source port: 0xe650 - 58960
+	destination port: 0x1bb - 443
+	sequence number: 0x51a5e31 - 85614129
+	acknowledgement number: 0x4f124c42 - 1326599234
+	header length: 0x5 - 5
+	flags: 0x10 - 16
+	...0 .... .... - Nonce
+	.... 0... .... - Congestion Window Reduced
+	.... .0.. .... - ECN-Echo
+	.... ..0. .... - Urgent
+	.... ...1 .... - Acknowledgement
+	.... .... 0... - Push
+	.... .... .0.. - Reset
+	.... .... ..0. - Syn
+	.... .... ...0 - Fin
+	window: 0xfb - 251
+	checksum: 0x1038 - 4152
+	urgent pointer: 0x0 - 0
+
+Frame 6
+
+ethernet: 
+	dst: 54:8d:5a:56:c7:55
+	src: be:9a:e5:d5:31:7d
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x28
+	total length: 0x28 - 40
+	id: 0xe09b - 57499
+	flags: 0x40
+	1. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0xfb - 251
+	protocol: 0x6
+	checksum: 0x325d - 12893
+	source adress: 0x687b17de - 104.123.23.222
+	destination adress: 0xc0a82bad - 192.168.43.173
+tcp: 
+	source port: 0x50 - 80
+	destination port: 0xe8f1 - 59633
+	sequence number: 0x6147fe6b - 1632108139
+	acknowledgement number: 0xede4bb09 - 3991190281
+	header length: 0x5 - 5
+	flags: 0x10 - 16
+	...0 .... .... - Nonce
+	.... 0... .... - Congestion Window Reduced
+	.... .0.. .... - ECN-Echo
+	.... ..0. .... - Urgent
+	.... ...1 .... - Acknowledgement
+	.... .... 0... - Push
+	.... .... .0.. - Reset
+	.... .... ..0. - Syn
+	.... .... ...0 - Fin
+	window: 0x5c1 - 1473
+	checksum: 0x4b81 - 19329
+	urgent pointer: 0x0 - 0
+
+Frame 7
+
+ethernet: 
+	dst: 54:8d:5a:56:c7:55
+	src: be:9a:e5:d5:31:7d
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x28
+	total length: 0x5dc - 1500
+	id: 0xe0c9 - 57545
+	flags: 0x40
+	1. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0xfb - 251
+	protocol: 0x6
+	checksum: 0x2c7b - 11387
+	source adress: 0x687b17de - 104.123.23.222
+	destination adress: 0xc0a82bad - 192.168.43.173
+tcp: 
+	source port: 0x50 - 80
+	destination port: 0xe8f1 - 59633
+	sequence number: 0x6147fe6b - 1632108139
+	acknowledgement number: 0xede4bb09 - 3991190281
+	header length: 0x5 - 5
+	flags: 0x10 - 16
+	...0 .... .... - Nonce
+	.... 0... .... - Congestion Window Reduced
+	.... .0.. .... - ECN-Echo
+	.... ..0. .... - Urgent
+	.... ...1 .... - Acknowledgement
+	.... .... 0... - Push
+	.... .... .0.. - Reset
+	.... .... ..0. - Syn
+	.... .... ...0 - Fin
+	window: 0x5c1 - 1473
+	checksum: 0x1279 - 4729
+	urgent pointer: 0x0 - 0
+http: 
+	HTTP/1.1 200 OK
+	Content-Type: text/xml; charset=utf-8
+	Server: Microsoft-IIS/10.0
+	X-ActivityId: c1844c9a-857f-4759-8f74-9cc87042666e
+	Access-Control-Allow-Origin: *
+	X-AspNet-Version: 4.0.30319
+	X-Powered-By: ASP.NET
+	Cache-Control: public, max-age=550
+	Date: Sat, 14 Nov 2020 22:32:49 GMT
+	Content-Length: 4211
+	Connection: keep-alive
+
+Frame 12
+
+ethernet: 
+	dst: 54:8d:5a:56:c7:55
+	src: be:9a:e5:d5:31:7d
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x28
+	total length: 0x23e - 574
+	id: 0xe0ca - 57546
+	flags: 0x40
+	1. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0xfb - 251
+	protocol: 0x6
+	checksum: 0x3018 - 12312
+	source adress: 0x687b17de - 104.123.23.222
+	destination adress: 0xc0a82bad - 192.168.43.173
+tcp: 
+	source port: 0x50 - 80
+	destination port: 0xe8f1 - 59633
+	sequence number: 0x6148041f - 1632109599
+	acknowledgement number: 0xede4bb09 - 3991190281
+	header length: 0x5 - 5
+	flags: 0x10 - 16
+	...0 .... .... - Nonce
+	.... 0... .... - Congestion Window Reduced
+	.... .0.. .... - ECN-Echo
+	.... ..0. .... - Urgent
+	.... ...1 .... - Acknowledgement
+	.... .... 0... - Push
+	.... .... .0.. - Reset
+	.... .... ..0. - Syn
+	.... .... ...0 - Fin
+	window: 0x5c1 - 1473
+	checksum: 0x905b - 36955
+	urgent pointer: 0x0 - 0
+http: 
+
+Frame 1
+
+ethernet: 
+	dst: be:9a:e5:d5:31:7d
+	src: 54:8d:5a:56:c7:55
+	eth type: 0x800 - 2048
+ipv4: 
+	version: 0x4 - 4
+	header length: 0x5 - 5 32 bit words
+	tos: 0x0
+	total length: 0x28 - 40
+	id: 0xd913 - 55571
+	flags: 0x40
+	1. - Dont Fragment
+	.0 - More Fragments
+	fragment offset: 0x0 - 0
+	ttl: 0x80 - 128
+	protocol: 0x6
+	checksum: 0x0 - 0
+	source adress: 0xc0a82bad - 192.168.43.173
+	destination adress: 0x687b17de - 104.123.23.222
+tcp: 
+	source port: 0xe8f1 - 59633
+	destination port: 0x50 - 80
+	sequence number: 0xede4bb09 - 3991190281
+	acknowledgement number: 0x61480635 - 1632110133
+	header length: 0x5 - 5
+	flags: 0x10 - 16
+	...0 .... .... - Nonce
+	.... 0... .... - Congestion Window Reduced
+	.... .0.. .... - ECN-Echo
+	.... ..0. .... - Urgent
+	.... ...1 .... - Acknowledgement
+	.... .... 0... - Push
+	.... .... .0.. - Reset
+	.... .... ..0. - Syn
+	.... .... ...0 - Fin
+	window: 0x100 - 256
+	checksum: 0x6cc9 - 27849
+	urgent pointer: 0x0 - 0
+
