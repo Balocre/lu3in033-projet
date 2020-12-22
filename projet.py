@@ -626,7 +626,7 @@ def hexdump(bytes):
         pass
 
 def save_to_pickle(tracetree, filename):
-    with io.open(filename, "wb") as f:
+    with io.open(filename, "wb+") as f:
         pickle.dump(tracetree, f)
 
 def load_from_pickle(filename):
@@ -640,7 +640,7 @@ def filter(frames, fil):
         add = 0
         while True:
             for e in fil:
-                proto, field, op, val = re.split('\s|\.', e)
+                proto, field, op, val = re.split('\s|\.', e.strip())
                 val = int(val) 
 
                 if pl.PROTO == proto:
@@ -929,6 +929,17 @@ def run_cursed_ui(stdscr, tracetree):
                     selfrmidx = 0
                 except ValueError as e:
                     pass
+            elif cmd == "export_pickle":
+                args = args[0].strip()
+                save_to_pickle(Trace033(frames), args)
+            elif cmd == "import_pickle":
+                args = args[0].strip()
+                frames = load_from_pickle(args).frames
+
+                topfrmidx = 0
+                selfrmidx = 0
+            elif cmd == "reset_filter":
+                frames = tracetree.frames
 
 
 
