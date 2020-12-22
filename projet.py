@@ -778,11 +778,10 @@ def run_cursed_ui(stdscr, tracetree):
     # main UI loop
     while True:
         # populate the frame list into the the frame pad
-
-        frmpad.erase()
+        frmpadh = len(frames) if len(frames) > 0 else 1
         frmpad_refresh()
-        frmpadh = len(frames)
         frmpad.resize(frmpadh, frmpadw)
+        
         
         i = 0
         for f in frames:
@@ -803,20 +802,18 @@ def run_cursed_ui(stdscr, tracetree):
             s = f"0x{i:04x} " + protos + f" {size}"
             frmpad.addstr(i, 0, s)
             i += 1
+
         frmpad.chgat(selfrmidx, 0, frmpadw, curses.A_STANDOUT)
         
         stdscr.refresh()
         frmpad_refresh()
-
-        selhdridx = 0
-
-        hdrpad.erase()
-        fldpad.erase()
-    
+        
         # build the protocol stack for selected frame
         protocol_stack = []
-        pl = frames[selfrmidx]
+        pl = frames[selfrmidx] if frames else None
         i = 0
+
+        selhdridx = 0
         while True:
             protocol_stack.append(pl)
             if hasattr(pl, "payload") and (pl.payload != None and not isinstance(pl.payload, bytes)):
@@ -831,7 +828,7 @@ def run_cursed_ui(stdscr, tracetree):
             proto_name = proto.PROTO if hasattr(proto, "PROTO") else "unknown"
             hdrpad.addstr(i, 0, proto_name)
             i += 1
-       
+        
         hdrpad_refresh()
         fldpad_refresh()
 
@@ -955,11 +952,20 @@ def run_cursed_ui(stdscr, tracetree):
                     tracetree = analyser.derive_tree(traceast)
 
                     frames = tracetree.frames
+
+                    topfrmidx = 0
+                    selfrmidx = 0
             else:
                 stdscr.addstr(stdscrh-2, 1, "Command unknown")
-
-            if err:
+            
+            if err != "":
                 pass
+        
+        
+        frmpad.erase()              
+        hdrpad.erase()
+        fldpad.erase()
+
 
         stdscr.move(stdscrh-1, 0)
         stdscr.clrtoeol()
@@ -993,4 +999,3 @@ if __name__ == "__main__":
     path = args.Trace
 
     main(path)
-
