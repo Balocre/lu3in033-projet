@@ -1,4 +1,5 @@
 import sys
+import pickle
 import argparse
 from dataclasses import astuple, dataclass, InitVar, field
 import io
@@ -113,7 +114,7 @@ class TraceASTNode033:
 
     parent: Optional[weakref.ReferenceType] = None
     frame: Optional[FrameASTNode033] = None
-    trace: Optional[Any] = None # fuck python
+    trace: Optional[Any] = None
 
 @dataclass
 class TraceAST033:
@@ -252,22 +253,23 @@ class HttpMessage:
     
     @property
     def size(self):
-        return len(self.header_data) \
+        return len(self.header_data) if self.header_data != None else 0 \
                 + len(self.message_data) if self.message_data != None else 0
 
     @property
     def header(self):
-        return self.header_data.decode("utf-8")
+        return self.header_data.decode("utf-8") if self.header_data != None else ""
 
     @classmethod
     def from_bytes(cls, http_data):
 
         split = http_data.split(b'\r\n\r\n', 1)
-        if len(split) == 2:
+        if split[0].find(b'HTTP') != -1: # if HTTP good chance that this is header
             http_header, http_message = split
+
         else:
-            http_header = split[0]
-            http_message = None
+            http_header = None
+            http_message = http_data
 
         return cls(http_header, http_message)
 
@@ -559,7 +561,6 @@ class TraceAnalyser033:
                     curoff = int(framenode.frame_fragment.frame_fragment_offset, 16)
                     if curoff + len(partial_data) != nextoff:
                         raise ValueError("Frame data is not contiguous")
-                        warnings.warn("Frame is incomplete, some data is missing")
 
                 # in this part the frame data is reorderred
                 frame_data = extend_pack_into("{}s".format(len(partial_data))
@@ -589,9 +590,6 @@ class TraceAnalyser033:
                     i += 1
         
         return trace_data
-
-    def save_to_json(self, tracetree):
-        pass
 
 
     def derive_tree(self, ast):
@@ -627,6 +625,48 @@ def hexdump(bytes):
     except Exception as e:
         pass
 
+def save_to_pickle(tracetree, filename):
+    with io.open(filename, "wb") as f:
+        pickle.dump(tracetree, f)
+
+def load_from_pickle(filename):
+    with io.open(filename, "rb") as f:
+        return pickle.load(f)
+
+def filter(trace, fil):
+    pdict = {
+        "ethernet": None,
+        "ipv4": None,
+        "tcp": None,
+        "http": None
+    }
+    frames = []
+    for f in trace.frames:
+        pl = f
+        add = 1
+        while True:
+            pdict[pl.PROTO] = pl
+            ethernet = pdict["ethernet"]
+            ipv4 = pdict["ipv4"]
+            tcp = pdict["tcp"]
+            http = pdict["http"]
+            for e in fil:
+                try:
+                    if eval(e) == False:
+                        add = 0
+                except AttributeError as e:
+                    pass
+                    
+            if add == 0:
+                break
+
+            if hasattr(pl, "payload") and pl.payload != None and not isinstance(pl.payload, bytes):
+                pl = pl.payload
+            else:
+                break
+        if add == 1:
+            frames.append(f)
+
 
 UP = -1
 DOWN = 1
@@ -635,11 +675,11 @@ DOWN = 1
 # to each class representing a known protocol is associated a dict mapping
 # its attributes to a format string used to display the informations
 pretty_names = {
-    EthFrame033: {"src": "src: 0x{1:x} - {0[0]:x}:{0[1]:x}:{0[2]:x}:{0[3]:x}:{0[4]:x}:{0[5]:x}"
-                    , "dst": "dst: 0x{1:x} - {0[0]:x}:{0[1]:x}:{0[2]:x}:{0[3]:x}:{0[4]:x}:{0[5]:x}"
+    EthFrame033: {"src": "src: {0[0]:x}:{0[1]:x}:{0[2]:x}:{0[3]:x}:{0[4]:x}:{0[5]:x}"
+                    , "dst": "dst: {0[0]:x}:{0[1]:x}:{0[2]:x}:{0[3]:x}:{0[4]:x}:{0[5]:x}"
                     , "type": "eth type: 0x{1:x} - {1:d}"}
     , IPv4Packet033: {"version": "version: 0x{1:x} - {1:d}"
-                        , "ihl": "header length: 0x{1:x} - {1:d}"
+                        , "ihl": "header length: 0x{1:x} - {1:d} 32 bit words"
                         , "tos": "tos: 0x{1:x}"
                         , "tlength": "total length: 0x{1:x} - {1:d}"
                         , "id": "id: 0x{1:x} - {1:d}"
@@ -648,7 +688,7 @@ pretty_names = {
                         , "mf": ".{1:d} - More Fragments"
                         , "frag_offset": "fragment offset: 0x{1:x} - {1:d}"
                         , "ttl" : "ttl: 0x{1:x} - {1:d}"
-                        , "proto": "protocol: 0x{1:x} - {1:d}"
+                        , "proto": "protocol: 0x{1:x}"
                         , "checksum": "checksum: 0x{1:x} - {1:d}"
                         , "src": "source adress: 0x{1:x} - {0[0]:d}.{0[1]:d}.{0[2]:d}.{0[3]:d}"
                         , "dst": "destination adress: 0x{1:x} - {0[0]:d}.{0[1]:d}.{0[2]:d}.{0[3]:d}"}
@@ -671,6 +711,11 @@ pretty_names = {
                         , "chksum": "checksum: 0x{1:x} - {1:d}"
                         , "urgp": "urgent pointer: 0x{1:x} - {1:d}"}
 }
+
+commands = { "open": ""
+            , "filter": ""
+            , "hexdump": ""
+            , "export": "" }
 
 def run_cursed_ui(stdscr, tracetree):
     stdscrh, stdscrw = stdscr.getmaxyx()
@@ -824,7 +869,7 @@ def run_cursed_ui(stdscr, tracetree):
                 
                 if type(p) == HttpMessage:
                     buf = io.StringIO(p.header)
-                    n = 0
+                    n = 1
                     while l := buf.readline(fldpadw):
                         n+=1
                     buf.seek(0)
@@ -880,6 +925,8 @@ def main(path):
 
     traceast = parser.parse(parser.lex(ftrace))
     tracetree = analyser.derive_tree(traceast)
+
+    t = filter(tracetree, ["tcp.src_port == 80"])
 
     curses.wrapper(run_cursed_ui, tracetree)
 
