@@ -6,7 +6,7 @@ implémentation d'un "Analyseur de protocole réseaux"*
 
 ## **Structure**
 
-Le projet est composé d'un seul fichier : projet.py
+Le projet est composé d'un seul fichier : cybershark2077.py
 
 Ce fichier est découpé en 3 parties majeures:
     - Parser
@@ -15,17 +15,15 @@ Ce fichier est découpé en 3 parties majeures:
 
 #### **Parser** :
 
-Dans cette partie vous trouverez les classes et les fonctions permettant le
-parsing d'un fichier trace.
-    - Les classes composant l'AST
-    - La classe TraceFileParser033, qui contient les fonctions lexer et parser
+Dans cette partie vous trouverez :<br>
+    - Les classes et les fonctions permettant le parsing d'un fichier trace.<br>
+    - Les classes composant l'AST<br>
+    - La classe TraceFileParser033, qui contient les fonctions lexer et parser<br>
 
 #### **Analyser** :
-Dans cette partie se trouvent les classes associées a l'analyse des trames
-    - Les classes composant un Trace033
-    - La classse TraceAnalyzer033, qui regroupe les fonctions permettant 
-        d'extraire des données de l'AST et de produire un arbre représentant la
-        trace
+Dans cette partie se trouvent les classes associées a l'analyse des trames<br>
+    - Les classes composant un objet Trace033<br>
+    - La classse TraceAnalyzer033, qui regroupe les fonctions permettant d'extraire des données de l'AST et de produire un arbre représentant la trace<br>
     - Quelques fonctions permettant la manipulation des données produites
 
 #### **UI** :
@@ -41,9 +39,9 @@ généralement placées au dessus des fonctions qu'elles concernent.
 #### **Filtres**
 
 Voici les valeurs des champs qu'il est possible de filtrer pour chaque protocole
-un filtre s'écrit de la manière suivante : 
-```protocole1.champ1 == valeur1, protocole2.champ2 == valeur2, ...```
-la valeur doit être écrite en base décimale
+un filtre s'écrit de la manière suivante :<br>
+```protocole1.champ1 == valeur1, protocole2.champ2 == valeur2, ...```<br>
+La valeur doit être écrite en base décimale<br>
 
 A noter que le filtrage séléctionne les trames positivement en fonction des 
 filtres (ou) si vous voulez filtrez en fonction plusieurs champs (et) il faudra
